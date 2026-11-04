@@ -8,7 +8,7 @@ Startin the course at 4/11
 This repository is the course workspace for **Agentic AI Development**: a playground for experimenting with agentic AI patterns and tools, using Cursor as the primary development environment.
 
 ## Lectures
-
+  
 - [AI Agents](https://gamma.app/docs/AI-Agents-hlgj38btkim0stw?mode=present#card-a5abmjga0u18ily)
 - [MCP vs Skills](https://gamma.app/docs/MCP-vs-Skills-ajmej0v6tyu3yde)
 - [Model Context Protocol](https://model-context-protocol-dz2jt4d.gamma.site/)
