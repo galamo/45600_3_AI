@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Docker — what it is, and how the lab uses it</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* Same control-room schematic as the JWT round trip: one animated stage, a step rail, then a static diagram and the files you actually write. */
+:root{
+  --ground:#0f1720;
+  --panel:#16212d;
+  --line:#2a3a4b;
+  --ink:#e6edf3;
+  --muted:#8297ab;
+  --dim:#4d6276;
+  --req:#5cc8ff;
+  --res:#ffb547;
+  --ok:#3ddc97;
+  --jh:#ff6b8a;
+  --jp:#b18cff;
+  --js:#4fd1c5;
+  --display:"Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
+  --mono:"IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  color-scheme:dark;
+}
+html,body{background:var(--ground);color:var(--ink)}
+body{font-family:var(--mono);margin:0;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:28px 48px}
+.wrap{max-width:1040px;margin:0 auto;display:flex;flex-direction:column;gap:22px}
+header{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:8px 24px}
+h1{font-family:var(--display);font-weight:700;font-size:clamp(1.5rem,3.4vw,2.2rem);margin:0;letter-spacing:-.01em;text-wrap:balance}
+h1 em{font-style:normal;color:var(--req)}
+.meta{color:var(--muted);font-size:.8rem;letter-spacing:.06em;text-transform:uppercase}
+.lede{margin:-8px 0 0;color:var(--muted);font-size:.92rem;line-height:1.55;max-width:68ch}
+.stage{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.stage svg{display:block;width:100%;height:auto}
+svg text{font-family:var(--mono)}
+.caption{display:grid;grid-template-columns:auto 1fr;gap:14px;align-items:center;min-height:3.4em}
+.caption .n{font-family:var(--display);font-size:2rem;font-weight:700;color:var(--muted);font-variant-numeric:tabular-nums;width:2.2ch}
+.caption p{margin:0;font-size:.95rem;line-height:1.5;min-width:0}
+.caption code{color:var(--req)}
+.caption code.r{color:var(--res)}
+.caption .h{color:var(--jh)} .caption .p{color:var(--jp)} .caption .s{color:var(--js)}
+.phase-tags{display:flex;gap:6px;font-size:.7rem;letter-spacing:.08em;text-transform:uppercase;color:var(--dim)}
+.phase-tags span:first-child{flex:3}
+.phase-tags span:last-child{flex:5}
+.rail{display:grid;grid-template-columns:repeat(8,1fr);gap:6px}
+.rail div{height:4px;border-radius:2px;background:var(--line);transition:background .3s}
+.rail div.on{background:var(--req)}
+.rail div.on.done{background:var(--ok)}
+.rail div:nth-child(3){margin-right:10px}
+.controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+button{font:500 .85rem var(--mono);color:var(--ink);background:transparent;border:1px solid var(--line);border-radius:8px;padding:9px 16px;cursor:pointer;letter-spacing:.03em}
+button:hover{border-color:var(--muted)}
+button:focus-visible{outline:2px solid var(--req);outline-offset:2px}
+button.primary{background:var(--ink);color:var(--ground);border-color:var(--ink)}
+.speed{margin-left:auto;display:flex;gap:4px;align-items:center;color:var(--muted);font-size:.8rem}
+.speed button{padding:6px 10px}
+.speed button[aria-pressed="true"]{border-color:var(--req);color:var(--req)}
+@media (max-width:520px){.speed{margin-left:0}}
+
+.anatomy{border-top:1px solid var(--line);padding-top:22px;display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,.95fr);gap:18px 28px}
+.anatomy h2,.anatomy .flow{grid-column:1/-1}
+.anatomy h2{margin:0;font-family:var(--display);font-weight:500;font-size:1.15rem}
+.anatomy h3{margin:0 0 8px;font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:500}
+.flow{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.flow svg{display:block;width:100%;height:auto}
+.pipe-flow{stroke-dasharray:5 7;animation:flow 1.1s linear infinite}
+@keyframes flow{to{stroke-dashoffset:-24}}
+@media (prefers-reduced-motion:reduce){.pipe-flow{animation:none}}
+.token{font-size:.78rem;line-height:1.55;white-space:pre-wrap;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin:0;overflow-x:auto}
+.token .c{color:var(--dim)}
+.token .k{color:var(--req)}
+.token .s{color:var(--js)}
+.token .p{color:var(--jp)}
+.token .v{color:var(--res)}
+.notes{grid-column:1/-1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;font-size:.82rem;line-height:1.55;color:var(--muted)}
+.notes strong{display:block;color:var(--ink);font-weight:500;margin-bottom:4px}
+.notes code{color:var(--req)}
+@media (max-width:760px){
+  .anatomy{grid-template-columns:minmax(0,1fr)}
+  .notes{grid-template-columns:minmax(0,1fr)}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>What <em>Docker</em> is, and how this lab uses it</h1>
+    <span class="meta">image · container · compose</span>
+  </header>
+  <p class="lede">A container is a process with its own filesystem and network, started from a read-only image. In this course that is how the database lab gets Postgres and pgAdmin — one <code>docker compose up</code>, no local install.</p>
+
+  <div class="stage">
+  <svg viewBox="0 0 960 430" role="img" aria-label="Animation: an app cannot reach Postgres, then docker compose up pulls the postgres:16 image, starts a container, publishes port 5432, attaches the pgdata volume, starts pgAdmin, and opens localhost:5050">
+    <defs>
+      <filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+      <pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M24 0H0V24" fill="none" stroke="#1d2a38" stroke-width="1"/></pattern>
+    </defs>
+    <rect width="960" height="430" fill="url(#grid)"/>
+
+    <g fill="none" stroke-width="2" stroke-dasharray="4 6">
+      <path id="laneCompose" d="M280 190 H332" stroke="#5cc8ff" opacity=".35"/>
+      <path id="lanePull" d="M628 100 H676" stroke="#b18cff" opacity=".35"/>
+      <path id="lanePort" d="M332 140 H280" stroke="#ffb547" opacity=".28"/>
+      <path id="laneHttp" d="M280 264 H332" stroke="#5cc8ff" opacity=".28"/>
+      <path id="laneSql" d="M480 160 V216" stroke="#4fd1c5" opacity=".35"/>
+    </g>
+    <text id="labCompose" x="306" y="178" fill="#5cc8ff" font-size="9" text-anchor="middle" opacity=".55">compose</text>
+    <text id="labPull" x="652" y="90" fill="#b18cff" font-size="9" text-anchor="middle" opacity=".55">pull</text>
+    <text id="labSql" x="492" y="192" fill="#4fd1c5" font-size="9" opacity=".55">db:5432</text>
+
+    <!-- LAPTOP -->
+    <g id="host">
+      <rect id="hostFrame" x="28" y="18" width="252" height="342" rx="12" fill="#0f1720" stroke="#2a3a4b" stroke-width="2"/>
+      <path d="M28 30a12 12 0 0 1 12-12h228a12 12 0 0 1 12 12v22H28z" fill="#1d2a38"/>
+      <circle cx="46" cy="35" r="4" fill="#ff6b6b"/><circle cx="60" cy="35" r="4" fill="#ffb547"/><circle cx="74" cy="35" r="4" fill="#3ddc97"/>
+      <text id="url" x="92" y="39" fill="#8297ab" font-size="10">terminal</text>
+
+      <g id="termFail">
+        <text id="tCmd" x="46" y="78" fill="#e6edf3" font-size="12">$</text>
+        <rect id="caret" x="58" y="68" width="7" height="13" rx="1" fill="#5cc8ff" opacity="0"/>
+        <text id="tErr" x="46" y="106" fill="#ff6b8a" font-size="11" opacity="0">Error: ECONNREFUSED</text>
+        <text id="tErr2" x="46" y="124" fill="#ff6b8a" font-size="11" opacity="0">127.0.0.1:5432</text>
+        <text id="tHint" x="46" y="158" fill="#8297ab" font-size="11" opacity="0">Nothing is listening.</text>
+        <text id="tHint2" x="46" y="176" fill="#4d6276" font-size="11" opacity="0">Postgres is not installed.</text>
+        <text id="cmdLine" x="46" y="220" fill="#5cc8ff" font-size="12" opacity="0">$ docker compose up</text>
+      </g>
+
+      <g id="termOk" opacity="0">
+        <text x="46" y="78" fill="#3ddc97" font-size="12">$ docker compose up -d</text>
+        <text x="46" y="108" fill="#8297ab" font-size="10">SERVICE</text>
+        <text x="150" y="108" fill="#8297ab" font-size="10">HOST PORT</text>
+        <text x="46" y="132" fill="#e6edf3" font-size="12">db</text>
+        <text x="150" y="132" fill="#5cc8ff" font-size="12">5432</text>
+        <text x="46" y="154" fill="#e6edf3" font-size="12">pgadmin</text>
+        <text x="150" y="154" fill="#5cc8ff" font-size="12">5050</text>
+        <rect x="46" y="180" width="216" height="64" rx="8" fill="#16212d" stroke="#2a3a4b"/>
+        <text x="58" y="202" fill="#8297ab" font-size="9">BROWSER</text>
+        <text id="browserUrl" x="58" y="224" fill="#e6edf3" font-size="11">localhost:5050/browser/</text>
+        <text x="46" y="272" fill="#4d6276" font-size="10">login admin@example.com</text>
+      </g>
+
+      <text x="154" y="332" fill="#8297ab" font-size="11" text-anchor="middle" letter-spacing="2">YOUR LAPTOP</text>
+      <text x="154" y="348" fill="#4d6276" font-size="9.5" text-anchor="middle">host · ports you open</text>
+    </g>
+
+    <!-- ENGINE -->
+    <g id="engine">
+      <rect id="engineFrame" x="332" y="18" width="296" height="342" rx="12" fill="#0f1720" stroke="#2a3a4b" stroke-width="2"/>
+      <path d="M332 30a12 12 0 0 1 12-12h272a12 12 0 0 1 12 12v22H332z" fill="#1d2a38"/>
+      <circle class="led" cx="350" cy="35" r="4" fill="#2a3a4b"/><circle class="led" cx="364" cy="35" r="4" fill="#2a3a4b"/>
+      <text x="382" y="39" fill="#8297ab" font-size="10">docker engine</text>
+
+      <g id="pgCard">
+        <rect id="pgFrame" x="348" y="66" width="264" height="94" rx="8" fill="#16212d" stroke="#2a3a4b"/>
+        <circle id="pgDot" cx="366" cy="88" r="4" fill="#2a3a4b"/>
+        <text x="378" y="92" fill="#e6edf3" font-size="12" font-weight="600">postgres</text>
+        <text id="pgState" x="364" y="114" fill="#4d6276" font-size="10">image not pulled</text>
+        <text id="pgPort" x="364" y="132" fill="#4d6276" font-size="10">:5432 closed on the host</text>
+        <rect id="writeLayer" x="364" y="144" width="0" height="6" rx="3" fill="#4fd1c5"/>
+      </g>
+
+      <g id="adminCard" opacity=".38">
+        <rect id="adminFrame" x="348" y="216" width="264" height="94" rx="8" fill="#16212d" stroke="#2a3a4b" stroke-dasharray="5 4"/>
+        <circle id="adminDot" cx="366" cy="238" r="4" fill="#2a3a4b"/>
+        <text x="378" y="242" fill="#e6edf3" font-size="12" font-weight="600">pgadmin</text>
+        <text id="adminState" x="364" y="264" fill="#4d6276" font-size="10">not created</text>
+        <text id="adminPort" x="364" y="282" fill="#4d6276" font-size="10">:80 inside · :5050 on host</text>
+      </g>
+
+      <g id="vol" opacity=".35">
+        <rect id="volFrame" x="348" y="320" width="264" height="28" rx="8" fill="#0f1720" stroke="#ffb547" stroke-opacity=".45"/>
+        <text id="volText" x="480" y="338" fill="#ffb547" font-size="10" text-anchor="middle" opacity=".7">pgdata volume · database files</text>
+      </g>
+    </g>
+    <text x="480" y="382" fill="#8297ab" font-size="11" text-anchor="middle" letter-spacing="2">DOCKER ENGINE</text>
+    <text x="480" y="398" fill="#4d6276" font-size="9.5" text-anchor="middle">containers · network · volumes</text>
+
+    <!-- REGISTRY -->
+    <g id="registry">
+      <rect id="regFrame" x="676" y="18" width="256" height="342" rx="12" fill="#0f1720" stroke="#2a3a4b" stroke-width="2"/>
+      <path d="M676 30a12 12 0 0 1 12-12h232a12 12 0 0 1 12 12v22H676z" fill="#1d2a38"/>
+      <circle cx="694" cy="35" r="4" fill="#ff6b6b"/><circle cx="708" cy="35" r="4" fill="#ffb547"/><circle cx="722" cy="35" r="4" fill="#3ddc97"/>
+      <text x="738" y="39" fill="#8297ab" font-size="10">image registry</text>
+
+      <g id="layer0">
+        <rect class="layerBox" x="692" y="68" width="224" height="46" rx="8" fill="#0f1720" stroke="#2a3a4b"/>
+        <text class="layerName" x="706" y="88" fill="#8297ab" font-size="11">1 · base OS</text>
+        <text class="layerSub" x="706" y="104" fill="#4d6276" font-size="9">debian libraries</text>
+      </g>
+      <g id="layer1">
+        <rect class="layerBox" x="692" y="124" width="224" height="46" rx="8" fill="#0f1720" stroke="#2a3a4b"/>
+        <text class="layerName" x="706" y="144" fill="#8297ab" font-size="11">2 · postgres binaries</text>
+        <text class="layerSub" x="706" y="160" fill="#4d6276" font-size="9">the database program</text>
+      </g>
+      <g id="layer2">
+        <rect class="layerBox" x="692" y="180" width="224" height="46" rx="8" fill="#0f1720" stroke="#2a3a4b"/>
+        <text class="layerName" x="706" y="200" fill="#8297ab" font-size="11">3 · entrypoint + config</text>
+        <text class="layerSub" x="706" y="216" fill="#4d6276" font-size="9">how the container starts</text>
+      </g>
+
+      <rect id="tagFrame" x="692" y="246" width="224" height="78" rx="8" fill="#16212d" stroke="#2a3a4b"/>
+      <text x="706" y="268" fill="#8297ab" font-size="9" letter-spacing="1">IMAGE TAG</text>
+      <text id="tagName" x="706" y="292" fill="#e6edf3" font-size="14">postgres:16</text>
+      <text x="706" y="310" fill="#4d6276" font-size="9">name : version · read-only</text>
+
+      <text x="804" y="344" fill="#8297ab" font-size="11" text-anchor="middle" letter-spacing="2">IMAGE</text>
+    </g>
+
+    <g id="packet" opacity="0">
+      <rect id="pill" x="-80" y="-40" width="160" height="24" rx="12" fill="#16212d" stroke="#5cc8ff" stroke-width="1.5"/>
+      <text id="pillText" x="0" y="-24" fill="#5cc8ff" font-size="10.5" font-weight="500" text-anchor="middle"></text>
+      <circle id="dot" r="7" fill="#5cc8ff" filter="url(#glow)"/>
+    </g>
+
+    <g id="toast" opacity="0" transform="translate(480 58)">
+      <g id="toastInner">
+        <rect id="toastBg" x="-120" y="-20" width="240" height="40" rx="20" fill="#3ddc97" filter="url(#glow)"/>
+        <circle cx="-96" cy="0" r="11" fill="#0f1720"/>
+        <path d="M-101 0l4 4 7-8" fill="none" stroke="#3ddc97" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+        <text id="toastText" x="12" y="5" fill="#0f1720" font-size="13" font-weight="600" text-anchor="middle">Stack is up · :5050</text>
+      </g>
+    </g>
+  </svg>
+  </div>
+
+  <div class="caption" aria-live="polite"><span class="n" id="stepN">0</span><p id="stepText">The lab is about to start…</p></div>
+  <div>
+    <div class="phase-tags"><span>What Docker is</span><span>How the database lab uses it</span></div>
+    <div class="rail" id="rail"><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div></div>
+  </div>
+
+  <div class="controls">
+    <button class="primary" id="play" type="button">Pause</button>
+    <button id="replay" type="button">Replay</button>
+    <div class="speed" role="group" aria-label="Speed">Speed
+      <button type="button" data-s="0.5" aria-pressed="false">0.5×</button>
+      <button type="button" data-s="1" aria-pressed="true">1×</button>
+      <button type="button" data-s="2" aria-pressed="false">2×</button>
+    </div>
+  </div>
+
+  <section class="anatomy" aria-label="Docker model and lab files">
+    <h2>From a recipe to a running lab</h2>
+    <div class="flow">
+      <svg viewBox="0 0 960 168" role="img" aria-label="Dockerfile is built into an image, the image is run as a container, and a volume holds data outside the container">
+        <rect width="960" height="168" fill="#16212d"/>
+        <g>
+          <rect x="28" y="28" width="168" height="78" rx="10" fill="#0f1720" stroke="#5cc8ff" stroke-width="1.5"/>
+          <text x="112" y="58" fill="#5cc8ff" font-size="13" text-anchor="middle" font-weight="600">Dockerfile</text>
+          <text x="112" y="80" fill="#8297ab" font-size="10" text-anchor="middle">recipe for your app</text>
+        </g>
+        <g>
+          <rect x="276" y="28" width="168" height="78" rx="10" fill="#0f1720" stroke="#b18cff" stroke-width="1.5"/>
+          <text x="360" y="58" fill="#b18cff" font-size="13" text-anchor="middle" font-weight="600">Image</text>
+          <text x="360" y="80" fill="#8297ab" font-size="10" text-anchor="middle">read-only layers</text>
+        </g>
+        <g>
+          <rect x="524" y="28" width="168" height="78" rx="10" fill="#0f1720" stroke="#3ddc97" stroke-width="1.5"/>
+          <text x="608" y="58" fill="#3ddc97" font-size="13" text-anchor="middle" font-weight="600">Container</text>
+          <text x="608" y="80" fill="#8297ab" font-size="10" text-anchor="middle">one running process</text>
+        </g>
+        <g>
+          <rect x="772" y="28" width="160" height="78" rx="10" fill="#0f1720" stroke="#ffb547" stroke-width="1.5"/>
+          <text x="852" y="58" fill="#ffb547" font-size="13" text-anchor="middle" font-weight="600">Volume</text>
+          <text x="852" y="80" fill="#8297ab" font-size="10" text-anchor="middle">data that stays</text>
+        </g>
+        <path class="pipe-flow" d="M196 62 H276" fill="none" stroke="#5cc8ff" stroke-width="1.6"/>
+        <path d="M268 56 l8 6 l-8 6" fill="none" stroke="#5cc8ff" stroke-width="1.6"/>
+        <path class="pipe-flow" d="M444 62 H524" fill="none" stroke="#b18cff" stroke-width="1.6"/>
+        <path d="M516 56 l8 6 l-8 6" fill="none" stroke="#b18cff" stroke-width="1.6"/>
+        <path class="pipe-flow" d="M692 62 H772" fill="none" stroke="#ffb547" stroke-width="1.6"/>
+        <path d="M764 56 l8 6 l-8 6" fill="none" stroke="#ffb547" stroke-width="1.6"/>
+        <text x="236" y="132" fill="#8297ab" font-size="10" text-anchor="middle">docker build</text>
+        <text x="484" y="132" fill="#8297ab" font-size="10" text-anchor="middle">docker compose up</text>
+        <text x="732" y="124" fill="#8297ab" font-size="10" text-anchor="middle">mount -v</text>
+        <text x="732" y="140" fill="#4d6276" font-size="9" text-anchor="middle">survives down</text>
+      </svg>
+    </div>
+
+    <div>
+      <h3>Lab stack — cd db && docker compose up</h3>
+<pre class="token"><span class="k">services</span>:
+  <span class="s">db</span>:
+    <span class="k">image</span>: <span class="p">postgres:16</span>
+    <span class="k">ports</span>: [<span class="v">"5432:5432"</span>]   <span class="c"># host:container</span>
+    <span class="k">volumes</span>: [<span class="v">pgdata:/var/lib/postgresql/data</span>]
+  <span class="s">pgadmin</span>:
+    <span class="k">image</span>: <span class="p">dpage/pgadmin4</span>
+    <span class="k">ports</span>: [<span class="v">"5050:80"</span>]
+    <span class="k">environment</span>:
+      <span class="s">PGADMIN_DEFAULT_EMAIL</span>: <span class="p">admin@example.com</span>
+      <span class="s">PGADMIN_DEFAULT_PASSWORD</span>: <span class="p">admin</span>
+<span class="k">volumes</span>:
+  <span class="s">pgdata</span>:</pre>
+    </div>
+    <div>
+      <h3>Your own app — build an image, then run it</h3>
+<pre class="token"><span class="c"># Dockerfile</span>
+<span class="k">FROM</span> <span class="p">node:22-alpine</span>
+<span class="k">WORKDIR</span> <span class="v">/app</span>
+<span class="k">COPY</span> package*.json ./
+<span class="k">RUN</span> npm ci --omit=dev
+<span class="k">COPY</span> . .
+<span class="k">CMD</span> [<span class="p">"node"</span>, <span class="p">"agent.js"</span>]
+
+<span class="c"># shell</span>
+docker build -t lab-agent .
+docker run --env-file .env lab-agent
+docker compose ps
+docker compose logs -f db
+docker compose down       <span class="c"># keeps pgdata</span></pre>
+    </div>
+    <div class="notes">
+      <p><strong>A container is not a second laptop</strong>It is a Linux process with its own files, network stack, and process list, cut off from the rest of the machine. On macOS, Docker Desktop hides a small Linux VM and forwards the ports you publish. You still do not install Postgres yourself.</p>
+      <p><strong>Left is the host, right is the container</strong><code>5050:80</code> means the browser’s <code>localhost:5050</code> reaches port 80 inside pgAdmin. On the compose network, containers call each other by service name — <code>db:5432</code> — not by the laptop’s localhost.</p>
+      <p><strong>The image stays clean</strong>Writes inside a container sit on a thin layer that disappears with the container. The named volume <code>pgdata</code> is outside that layer, so <code>docker compose down</code> keeps the database. Add <code>-v</code> only when you mean to delete it.</p>
+    </div>
+  </section>
+</div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const REQ = '#5cc8ff', RES = '#ffb547', OK = '#3ddc97', LINE = '#2a3a4b';
+  const LAYERS = ['#5cc8ff', '#b18cff', '#4fd1c5'];
+  const CMD = 'node agent.js';
+  const packet = $('packet'), pill = $('pill'), pillText = $('pillText'), dot = $('dot');
+  const leds = [...document.querySelectorAll('.led')];
+  const toast = $('toast'), toastInner = $('toastInner'), toastText = $('toastText');
+  const stepN = $('stepN'), stepText = $('stepText'), rail = [...$('rail').children];
+
+  const P = [
+    {k:'idle', d:0.7, step:0, txt:'The lab is about to start…'},
+    {k:'type', d:1.45, step:1, txt:'The app tries to open Postgres on <code>127.0.0.1:5432</code>. That address is the laptop itself.'},
+    {k:'fail', d:1.7, step:1, txt:'<code>ECONNREFUSED</code> means nothing is listening. Postgres was never installed on this machine, and every laptop would fail differently.'},
+    {k:'idea', d:1.7, step:2, txt:'Docker’s answer is an <span class="p">image</span>: a read-only package of the program and the libraries it needs. The same <code>postgres:16</code> runs for the whole class.'},
+    {k:'compose', d:0.85, step:2, txt:'<code>docker compose up</code> reads one file and starts every service in it. You stop installing databases by hand.'},
+    {k:'toEng', d:1.2, step:3, from:[280,190], to:[332,190], label:'docker compose up', c:REQ, txt:'Compose asks the engine to create a network, pull any missing images, and start the containers.'},
+    {k:'pull', d:1.85, step:3, from:[676,100], to:[628,100], label:'pull postgres:16', c:'#b18cff', txt:'The engine downloads <span class="p">postgres:16</span>. An image is a stack of read-only layers. This drawing is the shape of that stack, not a literal dump of the official image.'},
+    {k:'ready', d:1.15, step:3, txt:'The image is local now. It is still not a database — nothing is running until a container is created from it.'},
+    {k:'boot', d:1.45, step:4, txt:'A <span class="s">container</span> is one running instance. It gets its own filesystem on top of the image, its own network address, and Postgres as process 1.'},
+    {k:'port', d:1.3, step:4, from:[332,140], to:[280,140], label:'publish 5432', c:RES, txt:'<code class="r">5432:5432</code> publishes the container’s port onto the laptop. The number on the left is yours; the number on the right is inside the container.'},
+    {k:'vol', d:1.5, step:5, txt:'A <span class="h">volume</span> mounts a Docker-managed folder into <code>/var/lib/postgresql/data</code>. Delete the container later and the files are still there.'},
+    {k:'admin', d:1.55, step:6, txt:'Compose starts pgAdmin in the same network. From inside that network the database host is the service name <code>db</code>, port <code>5432</code>.'},
+    {k:'open', d:0.55, step:7, txt:'Open <code>http://localhost:5050/browser/</code> and sign in with the compose credentials.'},
+    {k:'toAdmin', d:1.2, step:7, from:[280,264], to:[348,264], label:'GET :5050', c:REQ, txt:'The browser hits port <code>5050</code> on the laptop. Docker forwards it to port <code>80</code> in the pgAdmin container.'},
+    {k:'toDb', d:1.3, step:7, from:[480,210], to:[480,166], label:'db:5432', c:'#4fd1c5', txt:'pgAdmin talks to Postgres over the compose network. That hop never needs Postgres installed on the laptop.'},
+    {k:'up', d:2.7, step:8, txt:'The stack is up. Same images, same ports, same volume — on every machine. <code>docker compose down</code> removes the containers and keeps <code>pgdata</code>.'},
+  ];
+  const at = k => P.findIndex(p => p.k === k);
+  const total = P.reduce((a, p) => a + p.d, 0);
+  let t = 0, speed = 1, playing = true, last = null;
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  const ease = x => x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+  const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+  const back = x => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); };
+
+  function render(){
+    let acc = 0, ph = P[0], idx = 0, local = 0;
+    for (let i = 0; i < P.length; i++){
+      if (t < acc + P[i].d || i === P.length - 1){
+        ph = P[i]; idx = i; local = clamp((t - acc) / ph.d); break;
+      }
+      acc += P[i].d;
+    }
+    const lt = local * ph.d;
+    const reached = k => idx > at(k) || ph.k === k;
+
+    let tp = ph;
+    for (let i = idx; i >= 0 && !tp.txt; i--) tp = P[i];
+    stepN.textContent = ph.step;
+    if (stepText.innerHTML !== tp.txt) stepText.innerHTML = tp.txt;
+    rail.forEach((r, i) => { r.className = i < ph.step ? 'on' + (ph.k === 'up' ? ' done' : '') : ''; });
+
+    const typed = idx > at('type') ? 1 : (ph.k === 'type' ? local : 0);
+    const shown = CMD.slice(0, Math.round(typed * CMD.length));
+    $('tCmd').textContent = '$ ' + shown;
+    const caretX = 46 + 7.2 * ('$ '.length + shown.length);
+    $('caret').setAttribute('x', caretX);
+    $('caret').setAttribute('opacity', ph.k === 'type' && Math.floor(t * 3) % 2 === 0 ? 1 : 0);
+
+    const err = idx > at('fail') ? 1 : (ph.k === 'fail' ? clamp(local / 0.28) : 0);
+    $('tErr').setAttribute('opacity', err);
+    $('tErr2').setAttribute('opacity', err);
+    const hint = idx > at('fail') ? 1 : (ph.k === 'fail' ? clamp((local - 0.35) / 0.3) : 0);
+    $('tHint').setAttribute('opacity', hint);
+    $('tHint2').setAttribute('opacity', hint);
+    $('tHint').setAttribute('fill', ph.k === 'idea' ? REQ : '#8297ab');
+    const cmdOn = reached('compose') && idx < at('up');
+    $('cmdLine').setAttribute('opacity', ph.k === 'compose' ? clamp(local / 0.45) : (cmdOn ? 1 : 0));
+
+    const swap = idx > at('up') ? 1 : (ph.k === 'up' ? clamp((lt - 0.25) / 0.4) : 0);
+    $('termFail').setAttribute('opacity', 1 - swap);
+    $('termOk').setAttribute('opacity', swap);
+    $('url').textContent = swap > 0.5 || idx >= at('open') ? 'localhost:5050' : 'terminal';
+    const hostHot = ph.k === 'fail' ? '#ff6b8a' : (ph.k === 'type' || ph.k === 'open' || ph.k === 'up' ? (ph.k === 'up' ? OK : REQ) : LINE);
+    $('hostFrame').setAttribute('stroke', swap > 0.6 ? OK : hostHot);
+
+    const busy = ['toEng','pull','ready','boot','port','vol','admin','toAdmin','toDb'].includes(ph.k);
+    leds.forEach((l, i) => l.setAttribute('fill', busy && Math.floor(t * 12 + i * 1.7) % 3 === 0 ? OK : LINE));
+    const engHi = {toEng:REQ, pull:'#b18cff', boot:OK, port:RES, vol:RES, admin:OK, toDb:'#4fd1c5'}[ph.k];
+    $('engineFrame').setAttribute('stroke', engHi || (idx >= at('boot') ? '#1f6b4d' : LINE));
+
+    const pulled = idx > at('pull') || (ph.k === 'pull' && local > 0.72);
+    const running = idx > at('boot') || (ph.k === 'boot' && local > 0.42);
+    $('pgFrame').setAttribute('stroke', running ? OK : (pulled ? '#b18cff' : LINE));
+    $('pgDot').setAttribute('fill', running ? OK : (ph.k === 'boot' ? REQ : LINE));
+    $('pgState').textContent = running ? 'running · pid 1' : (pulled ? 'image pulled · stopped' : (ph.k === 'pull' ? 'pulling layers…' : 'image not pulled'));
+    $('pgState').setAttribute('fill', running ? OK : '#8297ab');
+    const published = idx > at('port') || ph.k === 'port';
+    $('pgPort').textContent = published ? '0.0.0.0:5432  →  5432' : ':5432 closed on the host';
+    $('pgPort').setAttribute('fill', published ? RES : '#4d6276');
+    const layerW = ph.k === 'boot' ? clamp((local - 0.15) / 0.5) : (idx > at('boot') ? 1 : 0);
+    $('writeLayer').setAttribute('width', 96 * layerW);
+
+    LAYERS.forEach((color, i) => {
+      const box = $('layer' + i).querySelector('.layerBox');
+      const name = $('layer' + i).querySelector('.layerName');
+      const lit = ph.k === 'pull' ? clamp((local - i * 0.26) / 0.28) : (idx > at('pull') ? 1 : 0);
+      box.setAttribute('stroke', lit > 0.35 ? color : LINE);
+      box.setAttribute('fill', lit > 0.35 ? '#121c28' : '#0f1720');
+      name.setAttribute('fill', lit > 0.35 ? color : '#8297ab');
+    });
+    $('regFrame').setAttribute('stroke', ph.k === 'pull' ? '#b18cff' : LINE);
+    $('tagFrame').setAttribute('stroke', pulled ? '#b18cff' : LINE);
+    $('tagName').setAttribute('fill', pulled ? '#b18cff' : '#e6edf3');
+
+    const adminOn = idx > at('admin') || (ph.k === 'admin' && local > 0.35);
+    $('adminCard').setAttribute('opacity', adminOn ? 1 : (ph.k === 'admin' ? 0.38 + 0.62 * local : 0.38));
+    $('adminFrame').setAttribute('stroke', adminOn ? OK : LINE);
+    $('adminFrame').setAttribute('stroke-dasharray', adminOn ? '0' : '5 4');
+    $('adminDot').setAttribute('fill', adminOn ? OK : LINE);
+    $('adminState').textContent = adminOn ? 'running · port 80' : (ph.k === 'admin' ? 'starting…' : 'not created');
+    $('adminState').setAttribute('fill', adminOn ? OK : '#4d6276');
+    $('adminPort').setAttribute('fill', idx >= at('toAdmin') ? REQ : '#4d6276');
+    $('laneSql').setAttribute('opacity', adminOn ? .85 : .2);
+    $('laneSql').setAttribute('stroke', ph.k === 'toDb' ? '#4fd1c5' : '#2a3a4b');
+    $('labSql').setAttribute('fill', ph.k === 'toDb' ? '#4fd1c5' : '#4d6276');
+
+    const volOn = idx > at('vol') || ph.k === 'vol';
+    $('vol').setAttribute('opacity', volOn ? 1 : 0.35);
+    $('volFrame').setAttribute('stroke', volOn ? RES : '#ffb547');
+    $('volFrame').setAttribute('stroke-opacity', volOn ? 1 : 0.45);
+    $('volText').setAttribute('opacity', volOn ? 1 : 0.7);
+    $('volText').textContent = volOn ? 'pgdata  →  /var/lib/postgresql/data' : 'pgdata volume · database files';
+
+    if (ph.from){
+      const e = ease(local);
+      const x = ph.from[0] + (ph.to[0] - ph.from[0]) * e;
+      const y = ph.from[1] + (ph.to[1] - ph.from[1]) * e;
+      packet.setAttribute('opacity', Math.min(1, local * 6, (1 - local) * 6 + 0.2));
+      packet.setAttribute('transform', `translate(${x} ${y})`);
+      const w = ph.label.length * 6.6 + 28;
+      pill.setAttribute('x', -w / 2);
+      pill.setAttribute('width', w);
+      pill.setAttribute('stroke', ph.c);
+      pill.setAttribute('y', -36);
+      pillText.setAttribute('y', -20);
+      pillText.textContent = ph.label;
+      pillText.setAttribute('fill', ph.c);
+      dot.setAttribute('fill', ph.c);
+    } else packet.setAttribute('opacity', 0);
+
+    if (ph.k === 'up'){
+      const s = clamp(lt / 0.45), out = clamp((lt - (ph.d - 0.55)) / 0.4);
+      const label = 'Stack is up · :5050';
+      toastText.textContent = label;
+      const w = label.length * 8.1 + 64;
+      $('toastBg').setAttribute('x', -w / 2);
+      $('toastBg').setAttribute('width', w);
+      toastInner.querySelector('circle').setAttribute('cx', -w / 2 + 24);
+      toastInner.querySelector('path').setAttribute('d', `M${-w / 2 + 19} 0l4 4 7-8`);
+      toastText.setAttribute('x', 16);
+      toast.setAttribute('opacity', s * (1 - out));
+      toastInner.setAttribute('transform', `translate(0 ${(1 - s) * 14 - out * 8}) scale(${Math.max(back(s) * (1 - out * 0.15), 0.01)})`);
+    } else toast.setAttribute('opacity', 0);
+  }
+
+  function frame(ts){
+    if (last == null) last = ts;
+    const dt = Math.min(0.1, (ts - last) / 1000);
+    last = ts;
+    if (playing){ t += dt * speed; if (t >= total) t = 0; }
+    render();
+    requestAnimationFrame(frame);
+  }
+
+  const playBtn = $('play');
+  const sync = () => { playBtn.textContent = playing ? 'Pause' : 'Play'; };
+  playBtn.addEventListener('click', () => { playing = !playing; sync(); });
+  $('replay').addEventListener('click', () => { t = 0; playing = true; sync(); });
+  document.querySelectorAll('.speed button').forEach(b => b.addEventListener('click', () => {
+    speed = +b.dataset.s;
+    document.querySelectorAll('.speed button').forEach(x => x.setAttribute('aria-pressed', x === b));
+  }));
+
+  const jump = new URLSearchParams(location.search).get('at');
+  if (jump && at(jump) >= 0){
+    const i = at(jump);
+    t = P.slice(0, i).reduce((a, p) => a + p.d, 0) + P[i].d * 0.62;
+    playing = false;
+  } else if (reduce){
+    t = total - 1.2;
+    playing = false;
+  }
+  sync();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

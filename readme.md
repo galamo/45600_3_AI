@@ -3,6 +3,7 @@
 ### Gal Amouyal
 
 galamouyal88@gmail.com
+Startin the course at 4/11
 
 This repository is the course workspace for **Agentic AI Development**: a playground for experimenting with agentic AI patterns and tools, using Cursor as the primary development environment.
 
@@ -753,10 +754,10 @@ Class example of entities and a relation:
 - Shiran is a good student in the course.
 - The course is AI agentic solutions 2026.
 
-| Entity | Relation | Entity |
-| --- | --- | --- |
-| Shiran | Student | Course |
-| Course | Name | AI agentic solutions |
+| Entity | Relation | Entity               |
+| ------ | -------- | -------------------- |
+| Shiran | Student  | Course               |
+| Course | Name     | AI agentic solutions |
 
 ```
 Shiran =Student=> Course

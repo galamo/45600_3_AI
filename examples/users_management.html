@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>System — User Management</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  --ground:#0f1720;
+  --panel:#16212d;
+  --panel-2:#1a2735;
+  --line:#2a3a4b;
+  --ink:#e6edf3;
+  --muted:#8297ab;
+  --dim:#4d6276;
+  --req:#5cc8ff;
+  --res:#ffb547;
+  --ok:#3ddc97;
+  --danger:#ff6b8a;
+  --jp:#b18cff;
+  --display:"Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
+  --mono:"IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  color-scheme:dark;
+}
+*,*::before,*::after{box-sizing:border-box}
+html,body{background:var(--ground);color:var(--ink);min-height:100%}
+body{
+  font-family:var(--mono);
+  margin:0;
+  padding:28px max(16px,env(safe-area-inset-right,0px)) 48px max(16px,env(safe-area-inset-left,0px));
+  background-image:
+    radial-gradient(ellipse 80% 50% at 10% -10%, rgba(92,200,255,.08), transparent 55%),
+    radial-gradient(ellipse 60% 40% at 90% 0%, rgba(177,140,255,.06), transparent 50%);
+}
+.wrap{max-width:1100px;margin:0 auto;display:flex;flex-direction:column;gap:22px}
+
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px 24px}
+.brand{display:flex;flex-direction:column;gap:6px}
+.meta{color:var(--muted);font-size:.75rem;letter-spacing:.08em;text-transform:uppercase}
+h1{font-family:var(--display);font-weight:700;font-size:clamp(1.6rem,3.4vw,2.3rem);margin:0;letter-spacing:-.01em}
+h1 em{font-style:normal;color:var(--req)}
+.lede{margin:0;color:var(--muted);font-size:.9rem;line-height:1.5;max-width:52ch}
+
+.toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.toolbar .search{flex:1;min-width:200px}
+input,select{
+  font:400 .85rem var(--mono);
+  color:var(--ink);
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:8px;
+  padding:10px 12px;
+  width:100%;
+}
+input::placeholder{color:var(--dim)}
+input:focus,select:focus{outline:2px solid var(--req);outline-offset:2px;border-color:transparent}
+button{
+  font:500 .85rem var(--mono);
+  color:var(--ink);
+  background:transparent;
+  border:1px solid var(--line);
+  border-radius:8px;
+  padding:9px 16px;
+  cursor:pointer;
+  letter-spacing:.03em;
+  white-space:nowrap;
+}
+button:hover{border-color:var(--muted)}
+button:focus-visible{outline:2px solid var(--req);outline-offset:2px}
+button.primary{background:var(--ink);color:var(--ground);border-color:var(--ink)}
+button.primary:hover{background:var(--req);border-color:var(--req);color:var(--ground)}
+button.danger{color:var(--danger);border-color:color-mix(in srgb,var(--danger) 40%,var(--line))}
+button.danger:hover{border-color:var(--danger);background:color-mix(in srgb,var(--danger) 12%,transparent)}
+button.ghost{padding:6px 10px;font-size:.78rem}
+button:disabled{opacity:.45;cursor:not-allowed}
+
+.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.stat{
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:12px;
+  padding:14px 16px;
+  display:flex;flex-direction:column;gap:4px;
+}
+.stat .label{font-size:.7rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.stat .value{font-family:var(--display);font-size:1.6rem;font-weight:700;font-variant-numeric:tabular-nums}
+.stat .value.ok{color:var(--ok)}
+.stat .value.warn{color:var(--res)}
+.stat .value.danger{color:var(--danger)}
+
+.panel{
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:14px;
+  overflow:hidden;
+}
+.panel-head{
+  display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;
+  gap:10px;padding:14px 18px;border-bottom:1px solid var(--line);
+}
+.panel-head h2{margin:0;font-family:var(--display);font-weight:500;font-size:1.05rem}
+.panel-head .count{color:var(--muted);font-size:.8rem}
+
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:.85rem}
+th,td{padding:12px 16px;text-align:left;border-bottom:1px solid var(--line);vertical-align:middle}
+th{color:var(--muted);font-size:.7rem;letter-spacing:.08em;text-transform:uppercase;font-weight:500;background:var(--panel-2)}
+tr:last-child td{border-bottom:none}
+tbody tr{transition:background .15s}
+tbody tr:hover{background:color-mix(in srgb,var(--req) 5%,transparent)}
+.user-cell{display:flex;align-items:center;gap:12px;min-width:0}
+.avatar{
+  width:36px;height:36px;border-radius:10px;flex-shrink:0;
+  display:grid;place-items:center;
+  font-family:var(--display);font-weight:700;font-size:.85rem;
+  color:var(--ground);
+}
+.user-meta{min-width:0;display:flex;flex-direction:column;gap:2px}
+.user-meta strong{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.user-meta span{color:var(--muted);font-size:.78rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.badge{
+  display:inline-block;padding:3px 8px;border-radius:6px;
+  font-size:.72rem;letter-spacing:.04em;border:1px solid var(--line);
+}
+.badge.admin{color:var(--jp);border-color:color-mix(in srgb,var(--jp) 45%,var(--line));background:color-mix(in srgb,var(--jp) 12%,transparent)}
+.badge.editor{color:var(--req);border-color:color-mix(in srgb,var(--req) 45%,var(--line));background:color-mix(in srgb,var(--req) 12%,transparent)}
+.badge.viewer{color:var(--muted);background:transparent}
+.badge.active{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 45%,var(--line));background:color-mix(in srgb,var(--ok) 12%,transparent)}
+.badge.inactive{color:var(--res);border-color:color-mix(in srgb,var(--res) 45%,var(--line));background:color-mix(in srgb,var(--res) 12%,transparent)}
+.actions{display:flex;gap:6px;flex-wrap:wrap}
+.empty{padding:40px 20px;text-align:center;color:var(--muted)}
+.empty strong{display:block;color:var(--ink);font-family:var(--display);font-size:1.1rem;margin-bottom:6px}
+
+.toast{
+  position:fixed;bottom:24px;right:24px;z-index:60;
+  background:var(--panel-2);border:1px solid var(--line);border-radius:10px;
+  padding:12px 16px;font-size:.85rem;box-shadow:0 12px 40px rgba(0,0,0,.35);
+  transform:translateY(120%);opacity:0;transition:transform .25s,opacity .25s;max-width:min(360px,calc(100vw - 32px));
+}
+.toast.show{transform:translateY(0);opacity:1}
+.toast.ok{border-color:color-mix(in srgb,var(--ok) 50%,var(--line))}
+.toast.err{border-color:color-mix(in srgb,var(--danger) 50%,var(--line))}
+
+.overlay{
+  position:fixed;inset:0;z-index:40;
+  background:rgba(8,12,18,.72);backdrop-filter:blur(4px);
+  display:grid;place-items:center;padding:16px;
+  opacity:0;pointer-events:none;transition:opacity .2s;
+}
+.overlay.open{opacity:1;pointer-events:auto}
+.modal{
+  width:min(480px,100%);
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:14px;
+  padding:22px;
+  transform:translateY(12px);transition:transform .2s;
+}
+.overlay.open .modal{transform:translateY(0)}
+.modal h3{margin:0 0 4px;font-family:var(--display);font-size:1.25rem;font-weight:700}
+.modal .sub{margin:0 0 18px;color:var(--muted);font-size:.85rem}
+.form{display:flex;flex-direction:column;gap:14px}
+.field{display:flex;flex-direction:column;gap:6px}
+.field label{font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.field .hint{font-size:.75rem;color:var(--dim)}
+.field.error input,.field.error select{border-color:var(--danger)}
+.field .err{color:var(--danger);font-size:.75rem;display:none}
+.field.error .err{display:block}
+.row-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:6px;flex-wrap:wrap}
+.confirm-name{color:var(--ink);font-weight:500}
+
+footer{color:var(--dim);font-size:.75rem;display:flex;flex-wrap:wrap;gap:8px 18px;justify-content:space-between}
+footer code{color:var(--muted)}
+
+@media (max-width:720px){
+  .stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .row-2{grid-template-columns:1fr}
+  th:nth-child(4),td:nth-child(4){display:none}
+}
+@media (max-width:480px){
+  .stats{grid-template-columns:1fr 1fr}
+  th:nth-child(3),td:nth-child(3){display:none}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <div class="meta">System console</div>
+      <h1>User <em>Management</em></h1>
+      <p class="lede">Add, update, and remove accounts. Data lives in this browser’s localStorage — no server required.</p>
+    </div>
+    <div class="toolbar" style="flex:0">
+      <button type="button" class="primary" id="btn-add">+ Add user</button>
+      <button type="button" id="btn-reset" title="Reload seed users">Reset demo</button>
+    </div>
+  </header>
+
+  <div class="stats" aria-live="polite">
+    <div class="stat"><span class="label">Total</span><span class="value" id="stat-total">0</span></div>
+    <div class="stat"><span class="label">Active</span><span class="value ok" id="stat-active">0</span></div>
+    <div class="stat"><span class="label">Inactive</span><span class="value warn" id="stat-inactive">0</span></div>
+    <div class="stat"><span class="label">Admins</span><span class="value" id="stat-admins">0</span></div>
+  </div>
+
+  <div class="toolbar">
+    <div class="search">
+      <label class="visually-hidden" for="q" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)">Search</label>
+      <input type="search" id="q" placeholder="Search name, email, or role…" autocomplete="off">
+    </div>
+    <select id="filter-role" aria-label="Filter by role" style="width:auto;min-width:140px">
+      <option value="">All roles</option>
+      <option value="admin">Admin</option>
+      <option value="editor">Editor</option>
+      <option value="viewer">Viewer</option>
+    </select>
+    <select id="filter-status" aria-label="Filter by status" style="width:auto;min-width:140px">
+      <option value="">All statuses</option>
+      <option value="active">Active</option>
+      <option value="inactive">Inactive</option>
+    </select>
+  </div>
+
+  <section class="panel" aria-labelledby="list-title">
+    <div class="panel-head">
+      <h2 id="list-title">Users</h2>
+      <span class="count" id="list-count">0 shown</span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>User</th>
+            <th>Role</th>
+            <th>Status</th>
+            <th>Joined</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="user-rows"></tbody>
+      </table>
+    </div>
+    <div class="empty" id="empty-state" hidden>
+      <strong>No users match</strong>
+      Try clearing filters or add a new user.
+    </div>
+  </section>
+
+  <footer>
+    <span>Persisted under <code>system.users.v1</code></span>
+    <span id="storage-note">localStorage ready</span>
+  </footer>
+</div>
+
+<!-- Add / Edit modal -->
+<div class="overlay" id="form-overlay" role="dialog" aria-modal="true" aria-labelledby="form-title">
+  <div class="modal">
+    <h3 id="form-title">Add user</h3>
+    <p class="sub" id="form-sub">Create a new account for the system.</p>
+    <form class="form" id="user-form" novalidate>
+      <input type="hidden" id="edit-id">
+      <div class="field" id="field-name">
+        <label for="name">Full name</label>
+        <input id="name" name="name" required maxlength="80" placeholder="Ada Lovelace" autocomplete="name">
+        <span class="err">Name is required (2+ characters).</span>
+      </div>
+      <div class="field" id="field-email">
+        <label for="email">Email</label>
+        <input id="email" name="email" type="email" required maxlength="120" placeholder="ada@system.io" autocomplete="email">
+        <span class="err">Enter a valid, unique email.</span>
+      </div>
+      <div class="row-2">
+        <div class="field" id="field-role">
+          <label for="role">Role</label>
+          <select id="role" name="role" required>
+            <option value="viewer">Viewer</option>
+            <option value="editor">Editor</option>
+            <option value="admin">Admin</option>
+          </select>
+        </div>
+        <div class="field" id="field-status">
+          <label for="status">Status</label>
+          <select id="status" name="status" required>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" id="form-cancel">Cancel</button>
+        <button type="submit" class="primary" id="form-submit">Save user</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Delete confirm -->
+<div class="overlay" id="delete-overlay" role="dialog" aria-modal="true" aria-labelledby="delete-title">
+  <div class="modal">
+    <h3 id="delete-title">Remove user</h3>
+    <p class="sub">This permanently deletes <span class="confirm-name" id="delete-name"></span> from localStorage. This cannot be undone.</p>
+    <div class="modal-actions">
+      <button type="button" id="delete-cancel">Cancel</button>
+      <button type="button" class="danger" id="delete-confirm">Remove user</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(() => {
+  const STORAGE_KEY = 'system.users.v1';
+  const AVATAR_COLORS = ['#5cc8ff', '#3ddc97', '#ffb547', '#b18cff', '#ff6b8a', '#4fd1c5'];
+
+  const SEED = [
+    { id: 'u_1001', name: 'Ada Lovelace', email: 'ada@system.io', role: 'admin', status: 'active', createdAt: '2024-03-12T10:00:00.000Z' },
+    { id: 'u_1002', name: 'Grace Hopper', email: 'grace@system.io', role: 'admin', status: 'active', createdAt: '2024-05-02T14:30:00.000Z' },
+    { id: 'u_1003', name: 'Alan Turing', email: 'alan@system.io', role: 'editor', status: 'active', createdAt: '2024-06-18T09:15:00.000Z' },
+    { id: 'u_1004', name: 'Katherine Johnson', email: 'katherine@system.io', role: 'editor', status: 'active', createdAt: '2024-08-01T16:45:00.000Z' },
+    { id: 'u_1005', name: 'Tim Berners-Lee', email: 'tim@system.io', role: 'viewer', status: 'active', createdAt: '2025-01-20T11:00:00.000Z' },
+    { id: 'u_1006', name: 'Margaret Hamilton', email: 'margaret@system.io', role: 'editor', status: 'inactive', createdAt: '2025-02-14T08:20:00.000Z' },
+    { id: 'u_1007', name: 'Linus Torvalds', email: 'linus@system.io', role: 'viewer', status: 'inactive', createdAt: '2025-04-09T13:10:00.000Z' },
+  ];
+
+  /** @type {typeof SEED} */
+  let users = [];
+  let pendingDeleteId = null;
+
+  const $ = (id) => document.getElementById(id);
+  const els = {
+    rows: $('user-rows'),
+    empty: $('empty-state'),
+    listCount: $('list-count'),
+    q: $('q'),
+    filterRole: $('filter-role'),
+    filterStatus: $('filter-status'),
+    formOverlay: $('form-overlay'),
+    deleteOverlay: $('delete-overlay'),
+    form: $('user-form'),
+    formTitle: $('form-title'),
+    formSub: $('form-sub'),
+    formSubmit: $('form-submit'),
+    editId: $('edit-id'),
+    name: $('name'),
+    email: $('email'),
+    role: $('role'),
+    status: $('status'),
+    deleteName: $('delete-name'),
+    toast: $('toast'),
+    storageNote: $('storage-note'),
+    statTotal: $('stat-total'),
+    statActive: $('stat-active'),
+    statInactive: $('stat-inactive'),
+    statAdmins: $('stat-admins'),
+  };
+
+  function uid() {
+    return 'u_' + Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-4);
+  }
+
+  function load() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) {
+        users = structuredClone(SEED);
+        save();
+        els.storageNote.textContent = 'Seeded demo users into localStorage';
+        return;
+      }
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) throw new Error('invalid');
+      users = parsed;
+      els.storageNote.textContent = `Loaded ${users.length} user(s) from localStorage`;
+    } catch {
+      users = structuredClone(SEED);
+      save();
+      els.storageNote.textContent = 'Corrupt data replaced with seed';
+    }
+  }
+
+  function save() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(users));
+  }
+
+  function toast(msg, kind = 'ok') {
+    els.toast.textContent = msg;
+    els.toast.className = 'toast show ' + kind;
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => els.toast.classList.remove('show'), 2600);
+  }
+
+  function initials(name) {
+    return name.split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]).join('').toUpperCase() || '?';
+  }
+
+  function colorFor(id) {
+    let h = 0;
+    for (let i = 0; i < id.length; i++) h = (h + id.charCodeAt(i) * (i + 1)) % AVATAR_COLORS.length;
+    return AVATAR_COLORS[h];
+  }
+
+  function formatDate(iso) {
+    try {
+      return new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'short', day: 'numeric' }).format(new Date(iso));
+    } catch {
+      return '—';
+    }
+  }
+
+  function filtered() {
+    const q = els.q.value.trim().toLowerCase();
+    const role = els.filterRole.value;
+    const status = els.filterStatus.value;
+    return users.filter((u) => {
+      if (role && u.role !== role) return false;
+      if (status && u.status !== status) return false;
+      if (!q) return true;
+      return [u.name, u.email, u.role].join(' ').toLowerCase().includes(q);
+    });
+  }
+
+  function updateStats() {
+    els.statTotal.textContent = String(users.length);
+    els.statActive.textContent = String(users.filter((u) => u.status === 'active').length);
+    els.statInactive.textContent = String(users.filter((u) => u.status === 'inactive').length);
+    els.statAdmins.textContent = String(users.filter((u) => u.role === 'admin').length);
+  }
+
+  function render() {
+    const list = filtered();
+    updateStats();
+    els.listCount.textContent = `${list.length} shown · ${users.length} total`;
+    els.rows.innerHTML = '';
+
+    if (!list.length) {
+      els.empty.hidden = false;
+      return;
+    }
+    els.empty.hidden = true;
+
+    const frag = document.createDocumentFragment();
+    for (const u of list) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>
+          <div class="user-cell">
+            <div class="avatar" style="background:${colorFor(u.id)}" aria-hidden="true">${initials(u.name)}</div>
+            <div class="user-meta">
+              <strong>${escapeHtml(u.name)}</strong>
+              <span>${escapeHtml(u.email)}</span>
+            </div>
+          </div>
+        </td>
+        <td><span class="badge ${u.role}">${escapeHtml(u.role)}</span></td>
+        <td><span class="badge ${u.status}">${escapeHtml(u.status)}</span></td>
+        <td>${formatDate(u.createdAt)}</td>
+        <td>
+          <div class="actions">
+            <button type="button" class="ghost" data-edit="${u.id}">Edit</button>
+            <button type="button" class="ghost danger" data-delete="${u.id}">Remove</button>
+          </div>
+        </td>`;
+      frag.appendChild(tr);
+    }
+    els.rows.appendChild(frag);
+  }
+
+  function escapeHtml(s) {
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function openForm(user) {
+    clearFieldErrors();
+    if (user) {
+      els.formTitle.textContent = 'Edit user';
+      els.formSub.textContent = 'Update account details. Email must stay unique.';
+      els.formSubmit.textContent = 'Save changes';
+      els.editId.value = user.id;
+      els.name.value = user.name;
+      els.email.value = user.email;
+      els.role.value = user.role;
+      els.status.value = user.status;
+    } else {
+      els.formTitle.textContent = 'Add user';
+      els.formSub.textContent = 'Create a new account for the system.';
+      els.formSubmit.textContent = 'Save user';
+      els.editId.value = '';
+      els.form.reset();
+      els.role.value = 'viewer';
+      els.status.value = 'active';
+    }
+    els.formOverlay.classList.add('open');
+    setTimeout(() => els.name.focus(), 50);
+  }
+
+  function closeForm() {
+    els.formOverlay.classList.remove('open');
+  }
+
+  function clearFieldErrors() {
+    ['field-name', 'field-email'].forEach((id) => $(id).classList.remove('error'));
+  }
+
+  function validate() {
+    clearFieldErrors();
+    let ok = true;
+    const name = els.name.value.trim();
+    const email = els.email.value.trim().toLowerCase();
+    const editId = els.editId.value;
+
+    if (name.length < 2) {
+      $('field-name').classList.add('error');
+      ok = false;
+    }
+    const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    const taken = users.some((u) => u.email.toLowerCase() === email && u.id !== editId);
+    if (!emailOk || taken) {
+      $('field-email').classList.add('error');
+      $('field-email').querySelector('.err').textContent = taken
+        ? 'That email is already in use.'
+        : 'Enter a valid, unique email.';
+      ok = false;
+    }
+    return ok ? { name, email } : null;
+  }
+
+  function openDelete(user) {
+    pendingDeleteId = user.id;
+    els.deleteName.textContent = user.name;
+    els.deleteOverlay.classList.add('open');
+  }
+
+  function closeDelete() {
+    pendingDeleteId = null;
+    els.deleteOverlay.classList.remove('open');
+  }
+
+  // Events
+  $('btn-add').addEventListener('click', () => openForm(null));
+  $('form-cancel').addEventListener('click', closeForm);
+  $('delete-cancel').addEventListener('click', closeDelete);
+
+  els.formOverlay.addEventListener('click', (e) => { if (e.target === els.formOverlay) closeForm(); });
+  els.deleteOverlay.addEventListener('click', (e) => { if (e.target === els.deleteOverlay) closeDelete(); });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    if (els.deleteOverlay.classList.contains('open')) closeDelete();
+    else if (els.formOverlay.classList.contains('open')) closeForm();
+  });
+
+  els.form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const data = validate();
+    if (!data) return;
+
+    const editId = els.editId.value;
+    if (editId) {
+      const idx = users.findIndex((u) => u.id === editId);
+      if (idx === -1) {
+        toast('User not found', 'err');
+        return;
+      }
+      users[idx] = {
+        ...users[idx],
+        name: data.name,
+        email: data.email,
+        role: els.role.value,
+        status: els.status.value,
+      };
+      save();
+      render();
+      closeForm();
+      toast(`Updated ${data.name}`);
+      return;
+    }
+
+    users.unshift({
+      id: uid(),
+      name: data.name,
+      email: data.email,
+      role: els.role.value,
+      status: els.status.value,
+      createdAt: new Date().toISOString(),
+    });
+    save();
+    render();
+    closeForm();
+    toast(`Added ${data.name}`);
+  });
+
+  $('delete-confirm').addEventListener('click', () => {
+    if (!pendingDeleteId) return;
+    const victim = users.find((u) => u.id === pendingDeleteId);
+    users = users.filter((u) => u.id !== pendingDeleteId);
+    save();
+    render();
+    closeDelete();
+    toast(victim ? `Removed ${victim.name}` : 'User removed');
+  });
+
+  els.rows.addEventListener('click', (e) => {
+    const editBtn = e.target.closest('[data-edit]');
+    const delBtn = e.target.closest('[data-delete]');
+    if (editBtn) {
+      const user = users.find((u) => u.id === editBtn.dataset.edit);
+      if (user) openForm(user);
+    }
+    if (delBtn) {
+      const user = users.find((u) => u.id === delBtn.dataset.delete);
+      if (user) openDelete(user);
+    }
+  });
+
+  els.q.addEventListener('input', render);
+  els.filterRole.addEventListener('change', render);
+  els.filterStatus.addEventListener('change', render);
+
+  $('btn-reset').addEventListener('click', () => {
+    if (!confirm('Replace all users with the original demo seed?')) return;
+    users = structuredClone(SEED);
+    save();
+    els.q.value = '';
+    els.filterRole.value = '';
+    els.filterStatus.value = '';
+    render();
+    toast('Demo users restored');
+  });
+
+  load();
+  render();
+})();
+</script>
+</body>
+</html>
