@@ -2,9 +2,12 @@
 // USED_SKILL_(react-axios-http)
 import axios from "axios";
 
+export type TranslateTo = "spanish" | "hebrew" | "";
+
 export type StoryRequest = {
   subject: string;
   generateImage?: boolean;
+  translateTo?: TranslateTo;
   systemPrompt?: string;
 };
 
@@ -14,6 +17,9 @@ export type StoryResponse = {
   imagePath?: string | null;
   imageUrl?: string | null;
   modelId?: string;
+  translateTo?: "spanish" | "hebrew" | null;
+  translatedStory?: string | null;
+  translationModel?: string | null;
   error?: string;
 };
 

@@ -133,6 +133,67 @@ tbody tr:hover{background:color-mix(in srgb,var(--req) 5%,transparent)}
 .empty{padding:40px 20px;text-align:center;color:var(--muted)}
 .empty strong{display:block;color:var(--ink);font-family:var(--display);font-size:1.1rem;margin-bottom:6px}
 
+.report-grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:16px;
+}
+.report-card{
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:14px;
+  padding:18px;
+  display:flex;
+  flex-direction:column;
+  gap:16px;
+  min-width:0;
+}
+.report-card h2{
+  margin:0;
+  font-family:var(--display);
+  font-weight:500;
+  font-size:1.05rem;
+}
+.report-card .report-sub{margin:0;color:var(--muted);font-size:.8rem}
+.chart-layout{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  justify-content:center;
+  gap:20px 28px;
+}
+.pie-wrap{
+  position:relative;
+  width:180px;height:180px;
+  flex-shrink:0;
+}
+.pie-wrap svg{width:100%;height:100%;display:block}
+.pie-center{
+  position:absolute;inset:0;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  pointer-events:none;text-align:center;
+}
+.pie-center .n{
+  font-family:var(--display);font-weight:700;font-size:1.55rem;line-height:1;
+  font-variant-numeric:tabular-nums;
+}
+.pie-center .lbl{color:var(--muted);font-size:.68rem;letter-spacing:.08em;text-transform:uppercase;margin-top:4px}
+.legend{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px;min-width:140px;flex:1}
+.legend li{
+  display:grid;
+  grid-template-columns:12px 1fr auto auto;
+  gap:10px;
+  align-items:center;
+  font-size:.82rem;
+}
+.legend .swatch{width:12px;height:12px;border-radius:3px}
+.legend .name{text-transform:capitalize;color:var(--ink)}
+.legend .count{color:var(--muted);font-variant-numeric:tabular-nums}
+.legend .pct{color:var(--dim);font-variant-numeric:tabular-nums;min-width:3.2ch;text-align:right}
+.pie-slice{transition:opacity .15s}
+.pie-slice:hover{opacity:.85}
+.report-empty{color:var(--muted);font-size:.85rem;text-align:center;padding:24px 8px}
+
 .toast{
   position:fixed;bottom:24px;right:24px;z-index:60;
   background:var(--panel-2);border:1px solid var(--line);border-radius:10px;
@@ -177,6 +238,7 @@ footer code{color:var(--muted)}
 
 @media (max-width:720px){
   .stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .report-grid{grid-template-columns:1fr}
   .row-2{grid-template-columns:1fr}
   th:nth-child(4),td:nth-child(4){display:none}
 }
@@ -206,6 +268,23 @@ footer code{color:var(--muted)}
     <div class="stat"><span class="label">Inactive</span><span class="value warn" id="stat-inactive">0</span></div>
     <div class="stat"><span class="label">Admins</span><span class="value" id="stat-admins">0</span></div>
   </div>
+
+  <section class="report-grid" aria-label="Users and roles report">
+    <article class="report-card">
+      <div>
+        <h2>Roles report</h2>
+        <p class="report-sub">Share of users by assigned role</p>
+      </div>
+      <div class="chart-layout" id="role-chart"></div>
+    </article>
+    <article class="report-card">
+      <div>
+        <h2>Status report</h2>
+        <p class="report-sub">Active vs inactive accounts</p>
+      </div>
+      <div class="chart-layout" id="status-chart"></div>
+    </article>
+  </section>
 
   <div class="toolbar">
     <div class="search">
@@ -357,7 +436,19 @@ footer code{color:var(--muted)}
     statActive: $('stat-active'),
     statInactive: $('stat-inactive'),
     statAdmins: $('stat-admins'),
+    roleChart: $('role-chart'),
+    statusChart: $('status-chart'),
   };
+
+  const ROLE_META = [
+    { key: 'admin', label: 'Admin', color: '#b18cff' },
+    { key: 'editor', label: 'Editor', color: '#5cc8ff' },
+    { key: 'viewer', label: 'Viewer', color: '#8297ab' },
+  ];
+  const STATUS_META = [
+    { key: 'active', label: 'Active', color: '#3ddc97' },
+    { key: 'inactive', label: 'Inactive', color: '#ffb547' },
+  ];
 
   function uid() {
     return 'u_' + Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-4);
@@ -431,9 +522,113 @@ footer code{color:var(--muted)}
     els.statAdmins.textContent = String(users.filter((u) => u.role === 'admin').length);
   }
 
+  function countBy(field, keys) {
+    const counts = Object.fromEntries(keys.map((k) => [k, 0]));
+    for (const u of users) {
+      if (counts[u[field]] !== undefined) counts[u[field]] += 1;
+    }
+    return counts;
+  }
+
+  function polarToCartesian(cx, cy, r, angleDeg) {
+    const rad = ((angleDeg - 90) * Math.PI) / 180;
+    return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+  }
+
+  function describeArc(cx, cy, r, startAngle, endAngle) {
+    const start = polarToCartesian(cx, cy, r, endAngle);
+    const end = polarToCartesian(cx, cy, r, startAngle);
+    const large = endAngle - startAngle > 180 ? 1 : 0;
+    return `M ${start.x} ${start.y} A ${r} ${r} 0 ${large} 0 ${end.x} ${end.y}`;
+  }
+
+  function renderPieChart(container, meta, counts, centerLabel) {
+    const total = Object.values(counts).reduce((a, b) => a + b, 0);
+    if (!total) {
+      container.innerHTML = '<p class="report-empty">No users to chart yet.</p>';
+      return;
+    }
+
+    const cx = 90;
+    const cy = 90;
+    const outerR = 78;
+    const innerR = 48;
+    let angle = 0;
+    const slices = [];
+
+    for (const item of meta) {
+      const value = counts[item.key] || 0;
+      if (!value) continue;
+      const sweep = (value / total) * 360;
+      const start = angle;
+      const end = angle + sweep;
+      // Full circle needs a special path; otherwise arc math breaks at 360°.
+      let path;
+      if (sweep >= 359.999) {
+        path = [
+          `M ${cx} ${cy - outerR}`,
+          `A ${outerR} ${outerR} 0 1 1 ${cx - 0.01} ${cy - outerR}`,
+          `L ${cx - 0.01} ${cy - innerR}`,
+          `A ${innerR} ${innerR} 0 1 0 ${cx} ${cy - innerR}`,
+          'Z',
+        ].join(' ');
+      } else {
+        const outer = describeArc(cx, cy, outerR, start, end);
+        const innerStart = polarToCartesian(cx, cy, innerR, start);
+        const innerEnd = polarToCartesian(cx, cy, innerR, end);
+        const large = sweep > 180 ? 1 : 0;
+        path = [
+          outer,
+          `L ${innerEnd.x} ${innerEnd.y}`,
+          `A ${innerR} ${innerR} 0 ${large} 1 ${innerStart.x} ${innerStart.y}`,
+          'Z',
+        ].join(' ');
+      }
+      slices.push({ ...item, value, pct: Math.round((value / total) * 100), path });
+      angle = end;
+    }
+
+    const legend = slices
+      .map(
+        (s) => `
+        <li>
+          <span class="swatch" style="background:${s.color}" aria-hidden="true"></span>
+          <span class="name">${escapeHtml(s.label)}</span>
+          <span class="count">${s.value}</span>
+          <span class="pct">${s.pct}%</span>
+        </li>`
+      )
+      .join('');
+
+    const paths = slices
+      .map(
+        (s) =>
+          `<path class="pie-slice" d="${s.path}" fill="${s.color}" data-label="${escapeHtml(s.label)}">
+            <title>${escapeHtml(s.label)}: ${s.value} (${s.pct}%)</title>
+          </path>`
+      )
+      .join('');
+
+    container.innerHTML = `
+      <div class="pie-wrap" role="img" aria-label="${escapeHtml(centerLabel)} distribution for ${total} users">
+        <svg viewBox="0 0 180 180" aria-hidden="true">${paths}</svg>
+        <div class="pie-center">
+          <span class="n">${total}</span>
+          <span class="lbl">${escapeHtml(centerLabel)}</span>
+        </div>
+      </div>
+      <ul class="legend">${legend}</ul>`;
+  }
+
+  function updateCharts() {
+    renderPieChart(els.roleChart, ROLE_META, countBy('role', ROLE_META.map((m) => m.key)), 'users');
+    renderPieChart(els.statusChart, STATUS_META, countBy('status', STATUS_META.map((m) => m.key)), 'accounts');
+  }
+
   function render() {
     const list = filtered();
     updateStats();
+    updateCharts();
     els.listCount.textContent = `${list.length} shown · ${users.length} total`;
     els.rows.innerHTML = '';
 

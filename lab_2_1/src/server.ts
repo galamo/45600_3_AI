@@ -22,7 +22,7 @@ app.get("/api/health", (_req, res) => {
 
 app.post("/api/story", async (req, res) => {
   try {
-    const { subject, generateImage, systemPrompt } = req.body ?? {};
+    const { subject, generateImage, translateTo, systemPrompt } = req.body ?? {};
 
     if (typeof subject !== "string" || !subject.trim()) {
       res.status(400).json({
@@ -35,11 +35,20 @@ app.post("/api/story", async (req, res) => {
     logger.info("Story request received", {
       subjectLength: subject.trim().length,
       generateImage: Boolean(generateImage),
+      translateTo: typeof translateTo === "string" ? translateTo : null,
     });
 
-    const { story, imagePath, modelId } = await runKidsStory({
+    const {
+      story,
+      imagePath,
+      modelId,
+      translateTo: resolvedTranslateTo,
+      translatedStory,
+      translationModel,
+    } = await runKidsStory({
       subject,
       generateImage: Boolean(generateImage),
+      translateTo: typeof translateTo === "string" ? translateTo : null,
       systemPrompt: typeof systemPrompt === "string" ? systemPrompt : "", // debugging only !!!!!
     });
 
@@ -48,6 +57,9 @@ app.post("/api/story", async (req, res) => {
     logger.info("Story generated", {
       modelId,
       hasImage: Boolean(imagePath),
+      translateTo: resolvedTranslateTo,
+      hasTranslation: Boolean(translatedStory),
+      translationModel,
     });
 
     res.json({
@@ -56,14 +68,20 @@ app.post("/api/story", async (req, res) => {
       imagePath,
       imageUrl,
       modelId,
+      translateTo: resolvedTranslateTo,
+      translatedStory,
+      translationModel,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     logger.error("Story request failed", { error: message });
 
-    const status = message.includes("too long") || message.includes("provide a story")
-      ? 400
-      : 500;
+    const status =
+      message.includes("too long") ||
+      message.includes("provide a story") ||
+      message.includes("translateTo must be")
+        ? 400
+        : 500;
 
     res.status(status).json({
       success: false,

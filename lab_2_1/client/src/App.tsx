@@ -1,16 +1,29 @@
 import { FormEvent, useState } from "react";
 import axios from "axios";
-import { createStory } from "./api/storyClient";
+import { createStory, type TranslateTo } from "./api/storyClient";
 
 const MAX_SUBJECT_LENGTH = 80;
+
+const TRANSLATE_OPTIONS: Array<{ value: TranslateTo; label: string }> = [
+  { value: "", label: "No translation" },
+  { value: "spanish", label: "Spanish" },
+  { value: "hebrew", label: "Hebrew" },
+  
+];
 
 export default function App() {
   const [subject, setSubject] = useState("a bunny who loves carrots");
   const [generateImage, setGenerateImage] = useState(false);
+  const [translateTo, setTranslateTo] = useState<TranslateTo>("");
   const [loading, setLoading] = useState(false);
   const [story, setStory] = useState("");
+  const [translatedStory, setTranslatedStory] = useState<string | null>(null);
+  const [resolvedTranslateTo, setResolvedTranslateTo] = useState<"spanish" | "hebrew" | null>(
+    null,
+  );
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [modelId, setModelId] = useState<string | null>(null);
+  const [translationModel, setTranslationModel] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const remaining = MAX_SUBJECT_LENGTH - subject.length;
@@ -30,13 +43,17 @@ export default function App() {
     setLoading(true);
     setError(null);
     setStory("");
+    setTranslatedStory(null);
+    setResolvedTranslateTo(null);
     setImageUrl(null);
     setModelId(null);
+    setTranslationModel(null);
 
     try {
       const data = await createStory({
         subject: trimmed,
         generateImage,
+        translateTo: translateTo || undefined,
       });
 
       if (!data.success || !data.story) {
@@ -44,8 +61,11 @@ export default function App() {
       }
 
       setStory(data.story);
+      setTranslatedStory(data.translatedStory ?? null);
+      setResolvedTranslateTo(data.translateTo ?? null);
       setImageUrl(data.imageUrl ?? null);
       setModelId(data.modelId ?? null);
+      setTranslationModel(data.translationModel ?? null);
     } catch (err) {
       const message =
         axios.isAxiosError(err) && err.response?.data?.error
@@ -58,6 +78,13 @@ export default function App() {
       setLoading(false);
     }
   }
+
+  const translationLabel =
+    resolvedTranslateTo === "hebrew"
+      ? "Hebrew"
+      : resolvedTranslateTo === "spanish"
+        ? "Spanish"
+        : null;
 
   return (
     <div className="page">
@@ -96,6 +123,21 @@ export default function App() {
               {remaining} left
             </span>
           </div>
+
+          <label htmlFor="translateTo">Translate story</label>
+          <select
+            id="translateTo"
+            value={translateTo}
+            onChange={(e) => setTranslateTo(e.target.value as TranslateTo)}
+            disabled={loading}
+          >
+            {TRANSLATE_OPTIONS.map((option) => (
+              <option key={option.value || "none"} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+
           <button type="submit" disabled={loading}>
             {loading ? "Writing…" : "Write story"}
           </button>
@@ -108,6 +150,23 @@ export default function App() {
             <h2>Your story</h2>
             {modelId && <p className="model">Model: {modelId}</p>}
             <p className="story">{story}</p>
+
+            {translatedStory && translationLabel && (
+              <div className="translation">
+                <h3>{translationLabel} translation</h3>
+                {translationModel && (
+                  <p className="model">Translation model: {translationModel}</p>
+                )}
+                <p
+                  className="story"
+                  dir={resolvedTranslateTo === "hebrew" ? "rtl" : "ltr"}
+                  lang={resolvedTranslateTo === "hebrew" ? "he" : "es"}
+                >
+                  {translatedStory}
+                </p>
+              </div>
+            )}
+
             {imageUrl && (
               <figure className="illustration">
                 <img src={imageUrl} alt="Story illustration" />

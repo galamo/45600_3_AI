@@ -18,20 +18,23 @@ Write a short happy kids story (max 5 sentences) about the subject.
 Options:
   --system "<text>"   Override the system prompt for this run
   --image             Also generate and save a story illustration
+  --translate <lang>  Translate the story (spanish|hebrew|es|he)
   --debug             Print agent iterations, tool calls, and token usage
   --help              Show this help
 
 Environment (.env):
-  OPENROUTER_API_KEY        Required
-  OPENROUTER_MODEL          Default: openai/gpt-5.5 (also try openai/gpt-5.4)
-  OPENROUTER_IMAGE_MODEL    Default: openai/gpt-image-1-mini
-  SYSTEM_PROMPT             Optional default system prompt
+  OPENROUTER_API_KEY              Required
+  OPENROUTER_MODEL                Default: openai/gpt-5.5 (also try openai/gpt-5.4)
+  OPENROUTER_IMAGE_MODEL          Default: openai/gpt-image-1-mini
+  OPENROUTER_TRANSLATION_MODEL    Default: tencent/hy-mt2-30b-a3b
+  SYSTEM_PROMPT                   Optional default system prompt
 
 Subject must be at most ${MAX_SUBJECT_LENGTH} characters.
 
 Example:
   npm run agent -- "a bunny who loves carrots"
   npm run agent -- --image "a bunny who loves carrots"
+  npm run agent -- --translate hebrew "a bunny who loves carrots"
 `);
 }
 
@@ -40,6 +43,7 @@ function parseArgs(argv) {
     subject: "",
     systemPrompt: process.env.SYSTEM_PROMPT?.trim() || "",
     generateImage: false,
+    translateTo: null,
     debug: false,
   };
 
@@ -54,6 +58,14 @@ function parseArgs(argv) {
     }
     if (arg === "--debug") {
       args.debug = true;
+      continue;
+    }
+    if (arg === "--translate") {
+      const value = argv[++i];
+      if (!value) {
+        throw new Error("--translate requires a language (spanish|hebrew)");
+      }
+      args.translateTo = value;
       continue;
     }
     if (arg === "--system") {
@@ -338,15 +350,28 @@ async function main() {
     return;
   }
 
-  const { story, imagePath, modelId, imageModel, result } = await runKidsStory({
+  const {
+    story,
+    imagePath,
+    modelId,
+    imageModel,
+    translateTo,
+    translatedStory,
+    translationModel,
+    result,
+  } = await runKidsStory({
     subject: parsed.subject,
     generateImage: parsed.generateImage,
+    translateTo: parsed.translateTo,
     systemPrompt: parsed.systemPrompt || DEFAULT_SYSTEM_PROMPT,
   });
 
   console.log(`Model: ${modelId}`);
   if (parsed.generateImage && imageModel) {
     console.log(`Image model: ${imageModel}`);
+  }
+  if (translateTo && translationModel) {
+    console.log(`Translation model: ${translationModel} (${translateTo})`);
   }
   if (parsed.debug) {
     console.log("Debug: on (agent trace enabled)");
@@ -360,6 +385,11 @@ async function main() {
   }
 
   console.log(story);
+
+  if (translatedStory) {
+    console.log(`\n--- ${translateTo} translation ---\n`);
+    console.log(translatedStory);
+  }
 
   if (parsed.generateImage && imagePath) {
     console.log(`\nImage saved: ${imagePath}`);

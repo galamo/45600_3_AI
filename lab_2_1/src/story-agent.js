@@ -10,6 +10,12 @@ import { ChatOpenRouter } from "@langchain/openrouter";
 import { AIMessage } from "@langchain/core/messages";
 import { createGenerateStoryImageTool } from "../tools/generate-story-image.tool.js";
 import { createSaveStoryImageTool } from "../tools/save-story-image.tool.js";
+import { createTranslateStoryTool } from "../tools/translate-story.tool.js";
+import {
+  DEFAULT_TRANSLATION_MODEL,
+  TRANSLATION_LANGUAGES,
+  normalizeTranslateTo,
+} from "../services/openrouter-translate.service.js";
 
 export const MAX_SUBJECT_LENGTH = 80;
 
@@ -20,13 +26,16 @@ Rules:
 - Use simple words and a warm, cheerful tone.
 - End on a positive note.
 - Do not include a title, labels, or metadata—only the story text.
-- You have access to generate_story_image and save_story_image tools.
+- You have access to generate_story_image, save_story_image, and translate_story tools.
 - Call generate_story_image ONLY when the user explicitly asks for an image, picture, or illustration.
 - generate_story_image returns an imageId; it does not save the file.
 - Call save_story_image with that imageId ONLY when the user explicitly wants the image saved, or when you are told to save the illustration.
-- If the user did not ask for an image, write the story only and do not call any tools.
+- Call translate_story ONLY when the user explicitly asks for a Spanish or Hebrew translation.
+- When translation is requested, compose the complete English story first, then call translate_story with that full storyText and the requested targetLanguage ("spanish" or "hebrew").
+- If the user did not ask for an image, do not call image tools.
+- If the user did not ask for a translation, do not call translate_story.
 - When an image is requested, compose the complete story first and pass it as storyText to generate_story_image.
-- Your final message must contain only the complete story text. Never mention tools, images, imageIds, or file paths in it.`;
+- Your final message must contain only the complete English story text. Never mention tools, images, imageIds, file paths, or translations in it.`;
 
 export function validateSubject(subject) {
   const trimmed = subject.trim();
@@ -67,12 +76,68 @@ export function getSavedImagePath(result) {
 }
 
 /**
- * Run the kids-story agent and return the story (and optional saved image path).
- * @param {{ subject: string, generateImage?: boolean, systemPrompt?: string }} options
+ * Reads the structured payload returned by translate_story.
+ * @returns {{ translatedStory: string, targetLanguage: string, languageLabel?: string, model?: string } | null}
+ */
+export function getTranslationFromResult(result) {
+  const messages = result?.messages ?? [];
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    const name = msg?.name;
+    if (name !== "translate_story") continue;
+
+    const content = typeof msg.content === "string" ? msg.content : String(msg.content ?? "");
+    if (!content.trim() || content.startsWith("Error")) continue;
+
+    try {
+      const parsed = JSON.parse(content);
+      if (parsed?.success && typeof parsed.translatedStory === "string" && parsed.translatedStory.trim()) {
+        return {
+          translatedStory: parsed.translatedStory.trim(),
+          targetLanguage: parsed.targetLanguage,
+          languageLabel: parsed.languageLabel,
+          model: parsed.model,
+        };
+      }
+    } catch {
+      // Ignore non-JSON tool payloads.
+    }
+  }
+  return null;
+}
+
+function buildUserPrompt({ subject, generateImage, translateTo }) {
+  const lines = [`Write a short happy story for kids about: ${subject}`];
+  const followUps = [];
+
+  if (generateImage) {
+    followUps.push(
+      "After writing the story, generate an illustration image for it, then save it to disk.",
+    );
+  }
+
+  if (translateTo) {
+    const language = TRANSLATION_LANGUAGES[translateTo];
+    followUps.push(
+      `After writing the story, translate it to ${language.label} using translate_story with targetLanguage="${translateTo}".`,
+    );
+  }
+
+  if (followUps.length === 0) {
+    return lines[0];
+  }
+
+  return `${lines[0]}\n\n${followUps.join("\n")}`;
+}
+
+/**
+ * Run the kids-story agent and return the story (and optional image/translation).
+ * @param {{ subject: string, generateImage?: boolean, translateTo?: string|null, systemPrompt?: string }} options
  */
 export async function runKidsStory({
   subject,
   generateImage = false,
+  translateTo = null,
   systemPrompt = "",
 }) {
   const apiKey = process.env.OPENROUTER_API_KEY?.trim();
@@ -81,6 +146,12 @@ export async function runKidsStory({
   }
 
   const validatedSubject = validateSubject(subject);
+  const resolvedTranslateTo = normalizeTranslateTo(translateTo);
+
+  if (translateTo && !resolvedTranslateTo) {
+    throw new Error('translateTo must be "spanish", "hebrew", or omitted.');
+  }
+
   const resolvedSystemPrompt = (
     systemPrompt?.trim() ||
     process.env.SYSTEM_PROMPT?.trim() ||
@@ -88,6 +159,8 @@ export async function runKidsStory({
   ).trim();
   const modelId = process.env.OPENROUTER_MODEL?.trim() || "openai/gpt-5.5";
   const imageModel = process.env.OPENROUTER_IMAGE_MODEL?.trim() || "openai/gpt-image-1-mini";
+  const translationModel =
+    process.env.OPENROUTER_TRANSLATION_MODEL?.trim() || DEFAULT_TRANSLATION_MODEL;
 
   const model = new ChatOpenRouter({
     model: modelId,
@@ -107,19 +180,23 @@ export async function runKidsStory({
     model,
   });
   const saveStoryImageTool = createSaveStoryImageTool();
- 
+  const translateStoryTool = createTranslateStoryTool({
+    apiKey,
+    translationModel,
+  });
+
   const agent = createAgent({
     model,
-    tools: [generateStoryImageTool, saveStoryImageTool],
+    tools: [generateStoryImageTool, saveStoryImageTool, translateStoryTool],
     systemPrompt: resolvedSystemPrompt,
   });
 
   // The tools are always available. Only this wording makes the model use them.
-  const userPrompt = generateImage
-    ? `Write a short happy story for kids about: ${validatedSubject}
-
-After writing the story, generate an illustration image for it, then save it to disk.`
-    : `Write a short happy story for kids about: ${validatedSubject}`;
+  const userPrompt = buildUserPrompt({
+    subject: validatedSubject,
+    generateImage,
+    translateTo: resolvedTranslateTo,
+  });
 
   const result = await agent.invoke({
     messages: [{ role: "user", content: userPrompt }],
@@ -127,12 +204,20 @@ After writing the story, generate an illustration image for it, then save it to 
 
   const story = getStoryText(result);
   const imagePath = generateImage ? getSavedImagePath(result) : null;
+  const translation = resolvedTranslateTo ? getTranslationFromResult(result) : null;
+
+  if (resolvedTranslateTo && !translation?.translatedStory) {
+    throw new Error(`Translation to ${TRANSLATION_LANGUAGES[resolvedTranslateTo].label} was requested but not produced.`);
+  }
 
   return {
     story,
     imagePath,
     modelId,
     imageModel: generateImage ? imageModel : null,
+    translateTo: resolvedTranslateTo,
+    translatedStory: translation?.translatedStory ?? null,
+    translationModel: resolvedTranslateTo ? translation?.model || translationModel : null,
     result,
   };
 }

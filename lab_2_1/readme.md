@@ -67,6 +67,8 @@ npm run dev
 ```bash
 npm run agent -- "a friendly dragon"
 npm run agent -- --image "a friendly dragon"
+npm run agent -- --translate spanish "a friendly dragon"
+npm run agent -- --translate hebrew --image "a friendly dragon"
 npm run agent -- --debug "a friendly dragon"
 ```
 
@@ -77,9 +79,12 @@ npm run agent -- --debug "a friendly dragon"
 ```json
 {
   "subject": "a friendly dragon",
-  "generateImage": false
+  "generateImage": false,
+  "translateTo": "hebrew"
 }
 ```
+
+`translateTo` accepts `spanish`, `hebrew`, `es`, or `he` (omit for English only).
 
 Response:
 
@@ -89,7 +94,10 @@ Response:
   "story": "...",
   "imagePath": null,
   "imageUrl": null,
-  "modelId": "openai/gpt-5.5"
+  "modelId": "openai/gpt-5.5",
+  "translateTo": "hebrew",
+  "translatedStory": "...",
+  "translationModel": "tencent/hy-mt2-30b-a3b"
 }
 ```
 
@@ -99,13 +107,14 @@ Generated images are served from `/generated-images/...`.
 
 ## Environment
 
-| Variable                 | Description                                                         |
-| ------------------------ | ------------------------------------------------------------------- |
-| `OPENROUTER_API_KEY`     | Required — from [OpenRouter keys](https://openrouter.ai/keys)       |
-| `OPENROUTER_MODEL`       | `openai/gpt-5.5` (default) or `openai/gpt-5.4`                      |
-| `OPENROUTER_IMAGE_MODEL` | `openai/gpt-image-1-mini` (default)                                 |
-| `SYSTEM_PROMPT`          | Optional default system instructions                                |
-| `PORT`                   | API port (default `3001`)                                           |
+| Variable                        | Description                                                         |
+| ------------------------------- | ------------------------------------------------------------------- |
+| `OPENROUTER_API_KEY`            | Required — from [OpenRouter keys](https://openrouter.ai/keys)       |
+| `OPENROUTER_MODEL`              | `openai/gpt-5.5` (default) or `openai/gpt-5.4`                      |
+| `OPENROUTER_IMAGE_MODEL`        | `openai/gpt-image-1-mini` (default)                                 |
+| `OPENROUTER_TRANSLATION_MODEL`  | `tencent/hy-mt2-30b-a3b` (default dedicated MT model)               |
+| `SYSTEM_PROMPT`                 | Optional default system instructions                                |
+| `PORT`                          | API port (default `3001`)                                           |
 
 Story subject is limited to **80 characters**.
 
@@ -118,6 +127,7 @@ Story subject is limited to **80 characters**.
 ## Ex_2
 
 - Support translation tool - if the user request to translate the story.
+- Implemented: UI/API/CLI can request Spanish or Hebrew; the agent calls `translate_story`, which uses `OPENROUTER_TRANSLATION_MODEL` (`tencent/hy-mt2-30b-a3b` by default).
 
 ## Model reasoning
 
@@ -133,18 +143,20 @@ The CLI (`agent.js`) and the API (`src/server.ts`) both call `runKidsStory()` in
 
 ### Main story agent
 
-The system prompt tells the model to use tools only when an image is requested. `--image` or `generateImage: true` adds that request to the user prompt.
+The system prompt tells the model to use tools only when an image or translation is requested. `--image` / `generateImage: true` and `--translate` / `translateTo` add those requests to the user prompt.
 
 ```mermaid
 flowchart TD
     Input["CLI or POST /api/story"] --> Run["runKidsStory<br/>validate the subject"]
     Run --> Model["Chat model<br/>OPENROUTER_MODEL"]
     Model --> Decide{"Tool call?"}
-    Decide -- "No" --> Story["Final message:<br/>the story text"]
+    Decide -- "No" --> Story["Final message:<br/>the English story text"]
     Decide -- "generate_story_image" --> Generate["Runs the story-image sub-agent"]
     Decide -- "save_story_image" --> Save["Writes a PNG to<br/>generated-images/"]
+    Decide -- "translate_story" --> Translate["OpenRouter MT model<br/>OPENROUTER_TRANSLATION_MODEL"]
     Generate -- "imageId" --> Model
     Save -- "saved path" --> Model
+    Translate -- "translatedStory JSON" --> Model
 ```
 
 ### Story-image sub-agent

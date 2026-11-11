@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<!--
+  Lab 1: static wireframe exported from Figma. This page has no agent or runtime logic.
+  Each element is absolutely positioned inside .frame, using the Figma coordinates.
+  The data-node-id attributes point back to the original Figma layers.
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Frame 1</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #f5f5f5;
+      }
+
+      .frame {
+        position: relative;
+        width: 323px;
+        height: 303px;
+        background: #ffffff;
+      }
+
+      .table-box {
+        position: absolute;
+        left: 64px;
+        top: 78px;
+        width: 120px;
+        height: 114px;
+        background: #d9d9d9;
+      }
+
+      .table-label {
+        position: absolute;
+        left: 97px;
+        top: 117px;
+        font-family: "Inter", system-ui, sans-serif;
+        font-size: 12px;
+        font-weight: 400;
+        line-height: normal;
+        color: #000000;
+        white-space: nowrap;
+      }
+
+      .vector {
+        position: absolute;
+        left: 51px;
+        top: 203px;
+        width: 243px;
+        height: 127px;
+      }
+
+      .vector svg {
+        display: block;
+        width: 100%;
+        height: 100%;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="frame" data-node-id="1:2">
+      <div class="table-box" data-node-id="1:3" aria-hidden="true"></div>
+      <p class="table-label" data-node-id="1:4">table</p>
+      <div class="vector" data-node-id="1:58">
+        <svg
+          viewBox="0 0 243.5 128.156"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+          aria-hidden="true"
+        >
+          <path
+            d="M0.00515437 32.9306C155.205 31.3306 226.672 95.5973 243.005 127.931L224.005 0.930615L175.005 39.9306"
+            stroke="#000000"
+          />
+        </svg>
+      </div>
+    </main>
+  </body>
+</html>

@@ -90,7 +90,8 @@ body {
   font-weight: 700;
 }
 
-.form input[type="text"] {
+.form input[type="text"],
+.form select {
   width: 100%;
   padding: 0.85rem 1rem;
   border: 1px solid var(--line);
@@ -100,7 +101,8 @@ body {
   font-size: 1.05rem;
 }
 
-.form input[type="text"]:focus {
+.form input[type="text"]:focus,
+.form select:focus {
   outline: 2px solid rgba(15, 122, 95, 0.35);
   border-color: var(--accent);
 }
@@ -186,6 +188,18 @@ button[type="submit"]:disabled {
   margin: 0;
   font-size: 1.12rem;
   white-space: pre-wrap;
+}
+
+.translation {
+  margin-top: 1.25rem;
+  padding-top: 1.1rem;
+  border-top: 1px solid var(--line);
+}
+
+.translation h3 {
+  margin: 0 0 0.35rem;
+  font-family: "Fraunces", serif;
+  font-size: 1.25rem;
 }
 
 .illustration {

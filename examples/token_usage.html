@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>System — Token Usage</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.6.1/dist/chart.umd.min.js"></script>
+<style>
+:root{
+  --ground:#0f1720;
+  --panel:#16212d;
+  --panel-2:#1a2735;
+  --line:#2a3a4b;
+  --ink:#e6edf3;
+  --muted:#8297ab;
+  --dim:#4d6276;
+  --req:#5cc8ff;
+  --res:#ffb547;
+  --ok:#3ddc97;
+  --danger:#ff6b8a;
+  --jp:#b18cff;
+  --display:"Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
+  --mono:"IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  color-scheme:dark;
+}
+*,*::before,*::after{box-sizing:border-box}
+html,body{background:var(--ground);color:var(--ink);min-height:100%}
+body{
+  font-family:var(--mono);
+  margin:0;
+  padding:28px max(16px,env(safe-area-inset-right,0px)) 48px max(16px,env(safe-area-inset-left,0px));
+  background-image:
+    radial-gradient(ellipse 80% 50% at 10% -10%, rgba(92,200,255,.08), transparent 55%),
+    radial-gradient(ellipse 60% 40% at 90% 0%, rgba(177,140,255,.06), transparent 50%);
+}
+.wrap{max-width:1100px;margin:0 auto;display:flex;flex-direction:column;gap:22px}
+
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px 24px}
+.brand{display:flex;flex-direction:column;gap:6px}
+.meta{color:var(--muted);font-size:.75rem;letter-spacing:.08em;text-transform:uppercase}
+h1{font-family:var(--display);font-weight:700;font-size:clamp(1.6rem,3.4vw,2.3rem);margin:0;letter-spacing:-.01em}
+h1 em{font-style:normal;color:var(--req)}
+.lede{margin:0;color:var(--muted);font-size:.9rem;line-height:1.5;max-width:52ch}
+
+.toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+button{
+  font:500 .85rem var(--mono);
+  color:var(--ink);
+  background:transparent;
+  border:1px solid var(--line);
+  border-radius:8px;
+  padding:9px 16px;
+  cursor:pointer;
+  letter-spacing:.03em;
+  white-space:nowrap;
+}
+button:hover{border-color:var(--muted)}
+button:focus-visible{outline:2px solid var(--req);outline-offset:2px}
+button.primary{background:var(--ink);color:var(--ground);border-color:var(--ink)}
+button.primary:hover{background:var(--req);border-color:var(--req);color:var(--ground)}
+button:disabled{opacity:.45;cursor:not-allowed}
+
+input,textarea,select{
+  font:400 .85rem var(--mono);
+  color:var(--ink);
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:8px;
+  padding:10px 12px;
+  width:100%;
+}
+textarea{min-height:110px;resize:vertical;line-height:1.5}
+input::placeholder,textarea::placeholder{color:var(--dim)}
+input:focus,textarea:focus,select:focus{outline:2px solid var(--req);outline-offset:2px;border-color:transparent}
+
+.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.stat{
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:12px;
+  padding:14px 16px;
+  display:flex;flex-direction:column;gap:4px;
+}
+.stat .label{font-size:.7rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.stat .value{font-family:var(--display);font-size:1.6rem;font-weight:700;font-variant-numeric:tabular-nums}
+.stat .value.ok{color:var(--ok)}
+.stat .value.warn{color:var(--res)}
+.stat .value.accent{color:var(--req)}
+
+.report-grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:16px;
+}
+.report-card,.panel{
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:14px;
+  overflow:hidden;
+}
+.report-card{padding:18px;display:flex;flex-direction:column;gap:16px;min-width:0}
+.report-card h2,.panel-head h2{
+  margin:0;font-family:var(--display);font-size:1.05rem;font-weight:700;
+}
+.report-sub{margin:4px 0 0;color:var(--muted);font-size:.8rem;line-height:1.4}
+.chart-box{position:relative;height:240px}
+.chart-box canvas{max-width:100%}
+
+.panel-head{
+  display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;
+  gap:8px;padding:14px 16px;border-bottom:1px solid var(--line);background:var(--panel-2);
+}
+.panel-body{padding:16px}
+.panel-body.tight{padding:0}
+
+.form-grid{display:grid;gap:14px}
+.field{display:flex;flex-direction:column;gap:6px}
+.field label{font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.row-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.form-actions{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}
+
+.result-box{
+  background:var(--panel-2);
+  border:1px solid var(--line);
+  border-radius:10px;
+  padding:14px 16px;
+  white-space:pre-wrap;
+  line-height:1.55;
+  min-height:120px;
+  color:var(--ink);
+}
+.result-box.empty{color:var(--dim)}
+.result-meta{
+  display:flex;flex-wrap:wrap;gap:8px 16px;
+  margin-top:12px;color:var(--muted);font-size:.78rem;
+}
+.result-meta strong{color:var(--ink);font-weight:500}
+.token-pill{
+  display:inline-flex;align-items:center;gap:6px;
+  border:1px solid var(--line);
+  border-radius:999px;
+  padding:4px 10px;
+  background:color-mix(in srgb,var(--panel-2) 80%,transparent);
+}
+.token-pill .dot{width:7px;height:7px;border-radius:50%}
+.token-pill .dot.prompt{background:var(--req)}
+.token-pill .dot.completion{background:var(--res)}
+.token-pill .dot.total{background:var(--ok)}
+
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:.85rem}
+th,td{padding:12px 16px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--muted);font-size:.7rem;letter-spacing:.08em;text-transform:uppercase;font-weight:500}
+td.num{font-variant-numeric:tabular-nums;color:var(--ink)}
+td.muted{color:var(--muted);max-width:280px}
+.empty{padding:36px 20px;text-align:center;color:var(--muted)}
+.empty strong{display:block;color:var(--ink);font-family:var(--display);font-size:1.1rem;margin-bottom:6px}
+
+.toast{
+  position:fixed;left:50%;bottom:24px;z-index:50;
+  transform:translateX(-50%) translateY(120%);
+  background:var(--panel);border:1px solid var(--line);border-radius:10px;
+  padding:12px 16px;font-size:.85rem;box-shadow:0 12px 40px rgba(0,0,0,.35);
+  opacity:0;transition:transform .25s,opacity .25s;max-width:min(360px,calc(100vw - 32px));
+}
+.toast.show{transform:translateX(-50%) translateY(0);opacity:1}
+.toast.ok{border-color:color-mix(in srgb,var(--ok) 50%,var(--line))}
+.toast.err{border-color:color-mix(in srgb,var(--danger) 50%,var(--line))}
+
+footer{color:var(--dim);font-size:.75rem;display:flex;flex-wrap:wrap;gap:8px 18px;justify-content:space-between}
+footer code{color:var(--muted)}
+footer a{color:var(--req);text-decoration:none}
+footer a:hover{text-decoration:underline}
+
+@media (max-width:720px){
+  .stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .report-grid,.row-2{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <div class="meta">System console</div>
+      <h1>Token <em>Usage</em></h1>
+      <p class="lede">Run a prompt, see the final model result, and inspect prompt / completion / total tokens — charts update from local history.</p>
+    </div>
+    <div class="toolbar" style="flex:0">
+      <button type="button" id="btn-demo">Log demo run</button>
+      <button type="button" id="btn-reset" title="Clear history">Clear history</button>
+    </div>
+  </header>
+
+  <div class="stats" aria-live="polite">
+    <div class="stat"><span class="label">Runs</span><span class="value" id="stat-runs">0</span></div>
+    <div class="stat"><span class="label">Prompt tokens</span><span class="value accent" id="stat-prompt">0</span></div>
+    <div class="stat"><span class="label">Completion tokens</span><span class="value warn" id="stat-completion">0</span></div>
+    <div class="stat"><span class="label">Total tokens</span><span class="value ok" id="stat-total">0</span></div>
+  </div>
+
+  <section class="report-grid" aria-label="Token charts">
+    <article class="report-card">
+      <div>
+        <h2>Tokens by type</h2>
+        <p class="report-sub">Prompt vs completion across all logged runs</p>
+      </div>
+      <div class="chart-box"><canvas id="pie-chart" aria-label="Pie chart of token types"></canvas></div>
+    </article>
+    <article class="report-card">
+      <div>
+        <h2>Tokens per run</h2>
+        <p class="report-sub">Total tokens used in each final result</p>
+      </div>
+      <div class="chart-box"><canvas id="bar-chart" aria-label="Bar chart of tokens per run"></canvas></div>
+    </article>
+  </section>
+
+  <section class="panel" aria-labelledby="run-title">
+    <div class="panel-head">
+      <h2 id="run-title">New run</h2>
+      <span class="report-sub">Simulated agent response + usage (no API key required)</span>
+    </div>
+    <div class="panel-body">
+      <form class="form-grid" id="run-form">
+        <div class="field">
+          <label for="prompt">Prompt</label>
+          <textarea id="prompt" name="prompt" required placeholder="Explain what an AI agent is in two sentences…"></textarea>
+        </div>
+        <div class="row-2">
+          <div class="field">
+            <label for="model">Model</label>
+            <select id="model">
+              <option value="openrouter/auto">openrouter/auto</option>
+              <option value="openai/gpt-4o-mini">openai/gpt-4o-mini</option>
+              <option value="anthropic/claude-sonnet-4">anthropic/claude-sonnet-4</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="mode">Mode</label>
+            <select id="mode">
+              <option value="simulate">Simulate (demo)</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="primary" id="btn-run">Run &amp; show tokens</button>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <section class="panel" aria-labelledby="result-title">
+    <div class="panel-head">
+      <h2 id="result-title">Final result</h2>
+      <div class="result-meta" id="latest-pills" hidden>
+        <span class="token-pill"><span class="dot prompt"></span> Prompt <strong id="pill-prompt">0</strong></span>
+        <span class="token-pill"><span class="dot completion"></span> Completion <strong id="pill-completion">0</strong></span>
+        <span class="token-pill"><span class="dot total"></span> Total <strong id="pill-total">0</strong></span>
+      </div>
+    </div>
+    <div class="panel-body">
+      <div class="result-box empty" id="final-result">No run yet — submit a prompt to see the final answer and tokens used.</div>
+      <div class="result-meta" id="result-meta" hidden></div>
+    </div>
+  </section>
+
+  <section class="panel" aria-labelledby="history-title">
+    <div class="panel-head">
+      <h2 id="history-title">Run history</h2>
+      <span class="report-sub" id="history-count">0 runs</span>
+    </div>
+    <div class="panel-body tight">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>When</th>
+              <th>Model</th>
+              <th>Prompt</th>
+              <th>Completion</th>
+              <th>Total</th>
+              <th>Preview</th>
+            </tr>
+          </thead>
+          <tbody id="history-rows"></tbody>
+        </table>
+      </div>
+      <div class="empty" id="history-empty">
+        <strong>No token history</strong>
+        Run a prompt or click “Log demo run”.
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <span>Persisted under <code>system.tokens.v1</code></span>
+    <span><a href="./users_management.html">← User management</a></span>
+  </footer>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+const STORAGE_KEY = "system.tokens.v1";
+const DEMO_ANSWERS = [
+  "An AI agent is software that plans steps, calls tools, and iterates until a goal is met. Token usage is billed for both the prompt you send and the completion it returns.",
+  "Final result: the agent finished the task. Prompt tokens cover instructions and context; completion tokens cover the generated answer.",
+  "Done. The model returned a concise answer. Check the charts for how many tokens this run used."
+];
+
+/** @type {{id:string,at:string,model:string,prompt:string,result:string,promptTokens:number,completionTokens:number,totalTokens:number}[]} */
+let runs = [];
+let pieChart;
+let barChart;
+
+const $ = (id) => document.getElementById(id);
+
+function toast(msg, ok = true) {
+  const el = $("toast");
+  el.textContent = msg;
+  el.className = "toast show " + (ok ? "ok" : "err");
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => el.classList.remove("show"), 2200);
+}
+
+function load() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    runs = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(runs)) runs = [];
+  } catch {
+    runs = [];
+  }
+}
+
+function save() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(runs));
+}
+
+function estimateTokens(text) {
+  const words = String(text || "").trim().split(/\s+/).filter(Boolean).length;
+  return Math.max(8, Math.round(words * 1.35) + 12);
+}
+
+function simulateRun(prompt, model) {
+  const answer = DEMO_ANSWERS[Math.floor(Math.random() * DEMO_ANSWERS.length)];
+  const promptTokens = estimateTokens(prompt) + 40;
+  const completionTokens = estimateTokens(answer) + Math.floor(Math.random() * 40) + 20;
+  return {
+    id: crypto.randomUUID(),
+    at: new Date().toISOString(),
+    model,
+    prompt,
+    result: answer,
+    promptTokens,
+    completionTokens,
+    totalTokens: promptTokens + completionTokens
+  };
+}
+
+function demoRun() {
+  return simulateRun(
+    "Summarize token usage for an agent response.",
+    "openrouter/auto"
+  );
+}
+
+function totals() {
+  return runs.reduce(
+    (acc, r) => {
+      acc.prompt += r.promptTokens;
+      acc.completion += r.completionTokens;
+      acc.total += r.totalTokens;
+      return acc;
+    },
+    { prompt: 0, completion: 0, total: 0 }
+  );
+}
+
+function fmt(n) {
+  return Number(n || 0).toLocaleString();
+}
+
+function fmtWhen(iso) {
+  try {
+    return new Date(iso).toLocaleString(undefined, {
+      month: "short", day: "numeric", hour: "2-digit", minute: "2-digit"
+    });
+  } catch {
+    return iso;
+  }
+}
+
+function showLatest(run) {
+  const box = $("final-result");
+  if (!run) {
+    box.textContent = "No run yet — submit a prompt to see the final answer and tokens used.";
+    box.classList.add("empty");
+    $("latest-pills").hidden = true;
+    $("result-meta").hidden = true;
+    return;
+  }
+  box.textContent = run.result;
+  box.classList.remove("empty");
+  $("latest-pills").hidden = false;
+  $("pill-prompt").textContent = fmt(run.promptTokens);
+  $("pill-completion").textContent = fmt(run.completionTokens);
+  $("pill-total").textContent = fmt(run.totalTokens);
+  const meta = $("result-meta");
+  meta.hidden = false;
+  meta.innerHTML =
+    `<span>Model <strong>${escapeHtml(run.model)}</strong></span>` +
+    `<span>When <strong>${escapeHtml(fmtWhen(run.at))}</strong></span>` +
+    `<span>Prompt <strong>${escapeHtml(truncate(run.prompt, 80))}</strong></span>`;
+}
+
+function escapeHtml(s) {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function truncate(s, n) {
+  const t = String(s || "").replace(/\s+/g, " ").trim();
+  return t.length <= n ? t : t.slice(0, n - 1) + "…";
+}
+
+function renderStats() {
+  const t = totals();
+  $("stat-runs").textContent = fmt(runs.length);
+  $("stat-prompt").textContent = fmt(t.prompt);
+  $("stat-completion").textContent = fmt(t.completion);
+  $("stat-total").textContent = fmt(t.total);
+  $("history-count").textContent = runs.length + (runs.length === 1 ? " run" : " runs");
+}
+
+function renderHistory() {
+  const tbody = $("history-rows");
+  const empty = $("history-empty");
+  tbody.innerHTML = "";
+  if (!runs.length) {
+    empty.hidden = false;
+    return;
+  }
+  empty.hidden = true;
+  const ordered = [...runs].reverse();
+  for (const r of ordered) {
+    const tr = document.createElement("tr");
+    tr.innerHTML =
+      `<td>${escapeHtml(fmtWhen(r.at))}</td>` +
+      `<td>${escapeHtml(r.model)}</td>` +
+      `<td class="num">${fmt(r.promptTokens)}</td>` +
+      `<td class="num">${fmt(r.completionTokens)}</td>` +
+      `<td class="num">${fmt(r.totalTokens)}</td>` +
+      `<td class="muted">${escapeHtml(truncate(r.result, 72))}</td>`;
+    tbody.appendChild(tr);
+  }
+}
+
+function chartDefaults() {
+  Chart.defaults.color = "#8297ab";
+  Chart.defaults.borderColor = "#2a3a4b";
+  Chart.defaults.font.family = "'IBM Plex Mono', ui-monospace, monospace";
+}
+
+function renderCharts() {
+  const t = totals();
+  const pieData = {
+    labels: ["Prompt", "Completion"],
+    datasets: [{
+      data: [t.prompt || 0, t.completion || 0],
+      backgroundColor: ["#5cc8ff", "#ffb547"],
+      borderColor: "#16212d",
+      borderWidth: 2
+    }]
+  };
+
+  const recent = runs.slice(-12);
+  const barData = {
+    labels: recent.map((_, i) => "R" + (runs.length - recent.length + i + 1)),
+    datasets: [{
+      label: "Total tokens",
+      data: recent.map((r) => r.totalTokens),
+      backgroundColor: "#3ddc97",
+      borderRadius: 6,
+      maxBarThickness: 36
+    }]
+  };
+
+  if (pieChart) {
+    pieChart.data = pieData;
+    pieChart.update();
+  } else {
+    pieChart = new Chart($("pie-chart"), {
+      type: "doughnut",
+      data: pieData,
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: "bottom" },
+          tooltip: {
+            callbacks: {
+              label(ctx) {
+                const v = ctx.parsed || 0;
+                const sum = (ctx.dataset.data || []).reduce((a, b) => a + b, 0) || 1;
+                return ` ${ctx.label}: ${v.toLocaleString()} (${Math.round((v / sum) * 100)}%)`;
+              }
+            }
+          }
+        },
+        cutout: "62%"
+      }
+    });
+  }
+
+  if (barChart) {
+    barChart.data = barData;
+    barChart.update();
+  } else {
+    barChart = new Chart($("bar-chart"), {
+      type: "bar",
+      data: barData,
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { display: false } },
+          y: {
+            beginAtZero: true,
+            ticks: { precision: 0 },
+            grid: { color: "rgba(42,58,75,.65)" }
+          }
+        }
+      }
+    });
+  }
+}
+
+function refresh(latest) {
+  renderStats();
+  renderHistory();
+  renderCharts();
+  showLatest(latest ?? runs[runs.length - 1] ?? null);
+}
+
+function addRun(run) {
+  runs.push(run);
+  save();
+  refresh(run);
+}
+
+$("run-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const prompt = $("prompt").value.trim();
+  if (prompt.length < 2) {
+    toast("Enter a prompt first.", false);
+    return;
+  }
+  const btn = $("btn-run");
+  btn.disabled = true;
+  btn.textContent = "Running…";
+  setTimeout(() => {
+    const run = simulateRun(prompt, $("model").value);
+    addRun(run);
+    toast(`Final result logged · ${fmt(run.totalTokens)} tokens used`);
+    btn.disabled = false;
+    btn.textContent = "Run & show tokens";
+  }, 350);
+});
+
+$("btn-demo").addEventListener("click", () => {
+  const run = demoRun();
+  addRun(run);
+  toast(`Demo run · ${fmt(run.totalTokens)} tokens used`);
+});
+
+$("btn-reset").addEventListener("click", () => {
+  if (!confirm("Clear all token history?")) return;
+  runs = [];
+  save();
+  refresh(null);
+  toast("History cleared");
+});
+
+chartDefaults();
+load();
+refresh(runs[runs.length - 1] ?? null);
+</script>
+</body>
+</html>
