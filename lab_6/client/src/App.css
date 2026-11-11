@@ -390,27 +390,89 @@
   border-radius: 3px;
 }
 
-/* Route map (bottom) */
-.route-map-section {
+/* Route map bottom sheet */
+.route-map-sheet {
   width: 100%;
   background: white;
-  border-radius: 20px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  border-radius: 20px 20px 12px 12px;
+  box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.25);
   overflow: hidden;
   flex-shrink: 0;
+  transform: translateY(12px);
+  opacity: 0.96;
+  animation: mapSheetUp 0.35s ease-out forwards;
 }
 
-.route-map-title {
+.route-map-sheet.open {
+  transform: translateY(0);
+}
+
+@keyframes mapSheetUp {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.route-map-handle {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px 12px;
+  border: none;
+  cursor: pointer;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
-  padding: 12px 20px;
-  margin: 0;
-  font-size: 1.1rem;
+  text-align: center;
+}
+
+.route-map-handle-bar {
+  width: 40px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.65);
+}
+
+.route-map-title-text {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.route-map-arrow {
+  opacity: 0.85;
+  margin: 0 2px;
+}
+
+.route-flag-chip {
+  width: 22px;
+  height: 16px;
+  object-fit: cover;
+  border-radius: 2px;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  vertical-align: middle;
+}
+
+.route-map-toggle {
+  font-size: 0.75rem;
+  opacity: 0.85;
+  font-weight: 500;
 }
 
 .route-map-wrapper {
-  height: 280px;
+  height: 300px;
   width: 100%;
+  border-top: 1px solid #e9ecef;
 }
 
 .route-map {

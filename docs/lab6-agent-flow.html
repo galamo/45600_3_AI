@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lab 6 — chatbot → API → agent → tools</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  --ground:#0f1720;
+  --panel:#16212d;
+  --line:#2a3a4b;
+  --ink:#e6edf3;
+  --muted:#8297ab;
+  --dim:#4d6276;
+  --req:#5cc8ff;
+  --res:#ffb547;
+  --ok:#3ddc97;
+  --tool:#b18cff;
+  --display:"Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
+  --mono:"IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  color-scheme:dark;
+}
+html,body{background:var(--ground);color:var(--ink)}
+body{
+  font-family:var(--mono);
+  margin:0;
+  padding:28px max(16px,env(safe-area-inset-right)) 48px max(16px,env(safe-area-inset-left));
+  background-image:
+    radial-gradient(ellipse 70% 45% at 8% -8%, rgba(92,200,255,.07), transparent 55%),
+    radial-gradient(ellipse 50% 35% at 92% 0%, rgba(177,140,255,.05), transparent 50%);
+}
+.wrap{max-width:1120px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+header{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:8px 24px}
+h1{font-family:var(--display);font-weight:700;font-size:clamp(1.5rem,3.2vw,2.15rem);margin:0;letter-spacing:-.01em;text-wrap:balance}
+h1 em{font-style:normal;color:var(--req)}
+.meta{color:var(--muted);font-size:.78rem;letter-spacing:.07em;text-transform:uppercase}
+.lede{margin:-4px 0 0;color:var(--muted);font-size:.92rem;line-height:1.55;max-width:70ch}
+.lede code{color:var(--req)}
+
+.stage{
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:16px;
+  overflow:hidden;
+  position:relative;
+}
+.stage svg{display:block;width:100%;height:auto}
+svg text{font-family:var(--mono)}
+
+.caption{display:grid;grid-template-columns:auto 1fr;gap:14px;align-items:center;min-height:3.6em}
+.caption .n{font-family:var(--display);font-size:2rem;font-weight:700;color:var(--muted);font-variant-numeric:tabular-nums;width:2.2ch}
+.caption p{margin:0;font-size:.95rem;line-height:1.5}
+.caption code{color:var(--req)}
+.caption code.r{color:var(--res)}
+.caption code.t{color:var(--tool)}
+.caption code.o{color:var(--ok)}
+
+.rail{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+.rail div{height:4px;border-radius:2px;background:var(--line);transition:background .35s}
+.rail div.on{background:var(--req)}
+.rail div.on.done{background:var(--ok)}
+
+.controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+button{
+  font:500 .85rem var(--mono);
+  color:var(--ink);
+  background:transparent;
+  border:1px solid var(--line);
+  border-radius:8px;
+  padding:9px 16px;
+  cursor:pointer;
+  letter-spacing:.03em;
+}
+button:hover{border-color:var(--muted)}
+button:focus-visible{outline:2px solid var(--req);outline-offset:2px}
+button.primary{background:var(--ink);color:var(--ground);border-color:var(--ink)}
+.speed{margin-left:auto;display:flex;gap:4px;align-items:center;color:var(--muted);font-size:.8rem}
+.speed button{padding:6px 10px}
+.speed button[aria-pressed="true"]{border-color:var(--req);color:var(--req)}
+.sound{display:flex;gap:4px;align-items:center;color:var(--muted);font-size:.8rem}
+.sound button[aria-pressed="true"]{border-color:var(--ok);color:var(--ok)}
+@media (max-width:560px){.speed,.sound{margin-left:0}}
+
+.anatomy{border-top:1px solid var(--line);padding-top:22px;display:flex;flex-direction:column;gap:16px}
+.anatomy h2{margin:0;font-family:var(--display);font-weight:500;font-size:1.15rem}
+.flow{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.flow svg{display:block;width:100%;height:auto}
+.pipe-flow{stroke-dasharray:5 7;animation:flow 1.4s linear infinite}
+@keyframes flow{to{stroke-dashoffset:-24}}
+@media (prefers-reduced-motion:reduce){.pipe-flow{animation:none}}
+.notes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;font-size:.82rem;line-height:1.55;color:var(--muted)}
+.notes strong{display:block;color:var(--ink);font-weight:500;margin-bottom:4px}
+.notes code{color:var(--req)}
+@media (max-width:760px){.notes{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Lab 6 — from <em>chatbot</em> to tools and back</h1>
+    <span class="meta">client · api · agent · tools</span>
+  </header>
+  <p class="lede">One trip request leaves the browser, hits <code>POST /api/chat</code>, wakes the LangChain agent, calls the tools it needs, then returns a travel plan to the client.</p>
+
+  <div class="stage">
+  <svg viewBox="0 0 1080 460" role="img" aria-label="Animation of a chatbot request flowing through the API, agent, and tools, then returning to the client">
+    <defs>
+      <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+        <feGaussianBlur stdDeviation="7" result="b"/>
+        <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+      <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
+        <feGaussianBlur stdDeviation="1.2"/>
+      </filter>
+      <pattern id="grid" width="28" height="28" patternUnits="userSpaceOnUse">
+        <path d="M28 0H0V28" fill="none" stroke="#1a2735" stroke-width="1"/>
+      </pattern>
+    </defs>
+    <rect width="1080" height="460" fill="url(#grid)"/>
+
+    <!-- soft lane guides -->
+    <g fill="none" stroke-width="2" stroke-dasharray="5 8" opacity=".3">
+      <path id="lane1" d="M250 150 H290"/>
+      <path id="lane2" d="M490 150 H530"/>
+      <path id="lane3" d="M730 150 H770"/>
+      <path id="laneBack" d="M290 320 H250"/>
+    </g>
+
+    <!-- CLIENT -->
+    <g id="client" transform="translate(0 0)">
+      <rect id="clientFrame" x="36" y="48" width="214" height="320" rx="16" fill="#0f1720" stroke="#2a3a4b" stroke-width="2"/>
+      <path d="M36 62a16 16 0 0 1 16-14h182a16 16 0 0 1 16 14v20H36z" fill="#1d2a38"/>
+      <circle cx="56" cy="58" r="4" fill="#ff6b6b"/><circle cx="70" cy="58" r="4" fill="#ffb547"/><circle cx="84" cy="58" r="4" fill="#3ddc97"/>
+      <text x="102" y="62" fill="#8297ab" font-size="11">chatbot</text>
+
+      <rect x="54" y="108" width="178" height="56" rx="10" fill="#16212d" stroke="#2a3a4b"/>
+      <text x="66" y="130" fill="#8297ab" font-size="10">YOU</text>
+      <text id="userBubble" x="66" y="150" fill="#e6edf3" font-size="12">Tel Aviv → NYC</text>
+
+      <rect id="botBubble" x="54" y="188" width="178" height="72" rx="10" fill="#121c28" stroke="#2a3a4b" opacity=".45"/>
+      <text id="botLabel" x="66" y="210" fill="#4d6276" font-size="10">ASSISTANT</text>
+      <text id="botLine1" x="66" y="230" fill="#4d6276" font-size="11">waiting…</text>
+      <text id="botLine2" x="66" y="248" fill="#4d6276" font-size="11"></text>
+
+      <text x="143" y="340" fill="#8297ab" font-size="12" text-anchor="middle" letter-spacing="2">CLIENT</text>
+      <text x="143" y="358" fill="#4d6276" font-size="10" text-anchor="middle">React chatbot</text>
+    </g>
+
+    <!-- API -->
+    <g id="api" transform="translate(0 0)">
+      <rect id="apiFrame" x="290" y="48" width="200" height="320" rx="16" fill="#0f1720" stroke="#2a3a4b" stroke-width="2"/>
+      <path d="M290 62a16 16 0 0 1 16-14h168a16 16 0 0 1 16 14v20H290z" fill="#1d2a38"/>
+      <circle class="apiLed" cx="310" cy="58" r="4" fill="#2a3a4b"/><circle class="apiLed" cx="324" cy="58" r="4" fill="#2a3a4b"/>
+      <text x="340" y="62" fill="#8297ab" font-size="11">express</text>
+
+      <rect id="routeCard" x="308" y="118" width="164" height="70" rx="12" fill="#16212d" stroke="#2a3a4b"/>
+      <text x="322" y="144" fill="#8297ab" font-size="10">ROUTE</text>
+      <text id="routeText" x="322" y="168" fill="#e6edf3" font-size="13" font-weight="600">POST /api/chat</text>
+
+      <rect id="enrichCard" x="308" y="212" width="164" height="64" rx="12" fill="#121c28" stroke="#2a3a4b" opacity=".5"/>
+      <text x="322" y="238" fill="#4d6276" font-size="10">ENRICH</text>
+      <text id="enrichText" x="322" y="258" fill="#4d6276" font-size="11">coords · flags</text>
+
+      <text x="390" y="340" fill="#8297ab" font-size="12" text-anchor="middle" letter-spacing="2">API</text>
+      <text x="390" y="358" fill="#4d6276" font-size="10" text-anchor="middle">server.ts</text>
+    </g>
+
+    <!-- AGENT -->
+    <g id="agent" transform="translate(0 0)">
+      <rect id="agentFrame" x="530" y="48" width="200" height="320" rx="16" fill="#0f1720" stroke="#2a3a4b" stroke-width="2"/>
+      <path d="M530 62a16 16 0 0 1 16-14h168a16 16 0 0 1 16 14v20H530z" fill="#1d2a38"/>
+      <circle class="agentLed" cx="550" cy="58" r="4" fill="#2a3a4b"/><circle class="agentLed" cx="564" cy="58" r="4" fill="#2a3a4b"/>
+      <text x="580" y="62" fill="#8297ab" font-size="11">langchain</text>
+
+      <rect id="thinkCard" x="548" y="118" width="164" height="90" rx="12" fill="#16212d" stroke="#2a3a4b"/>
+      <text x="562" y="144" fill="#8297ab" font-size="10">AGENT</text>
+      <text id="thinkText" x="562" y="168" fill="#e6edf3" font-size="13" font-weight="600">idle</text>
+      <text id="thinkSub" x="562" y="188" fill="#4d6276" font-size="11">flightPlannerAgent</text>
+
+      <rect id="planCard" x="548" y="228" width="164" height="54" rx="12" fill="#121c28" stroke="#2a3a4b" opacity=".45"/>
+      <text x="562" y="252" fill="#4d6276" font-size="10">OUTPUT</text>
+      <text id="planText" x="562" y="270" fill="#4d6276" font-size="11">JSON travel plan</text>
+
+      <text x="630" y="340" fill="#8297ab" font-size="12" text-anchor="middle" letter-spacing="2">AGENT</text>
+      <text x="630" y="358" fill="#4d6276" font-size="10" text-anchor="middle">LLM + tools loop</text>
+    </g>
+
+    <!-- TOOLS -->
+    <g id="tools" transform="translate(0 0)">
+      <rect id="toolsFrame" x="770" y="48" width="274" height="320" rx="16" fill="#0f1720" stroke="#2a3a4b" stroke-width="2"/>
+      <path d="M770 62a16 16 0 0 1 16-14h242a16 16 0 0 1 16 14v20H770z" fill="#1d2a38"/>
+      <text x="792" y="62" fill="#8297ab" font-size="11">tools</text>
+
+      <g id="tool0">
+        <rect class="tBox" x="790" y="108" width="234" height="48" rx="12" fill="#16212d" stroke="#2a3a4b"/>
+        <circle class="tDot" cx="812" cy="132" r="5" fill="#2a3a4b"/>
+        <text x="828" y="128" fill="#e6edf3" font-size="13" font-weight="600">flight_finder</text>
+        <text x="828" y="146" fill="#4d6276" font-size="10">search flights · USD</text>
+      </g>
+      <g id="tool1">
+        <rect class="tBox" x="790" y="168" width="234" height="48" rx="12" fill="#16212d" stroke="#2a3a4b"/>
+        <circle class="tDot" cx="812" cy="192" r="5" fill="#2a3a4b"/>
+        <text x="828" y="188" fill="#e6edf3" font-size="13" font-weight="600">resolve_location</text>
+        <text x="828" y="206" fill="#4d6276" font-size="10">lat · lon · flag</text>
+      </g>
+      <g id="tool2">
+        <rect class="tBox" x="790" y="228" width="234" height="48" rx="12" fill="#16212d" stroke="#2a3a4b"/>
+        <circle class="tDot" cx="812" cy="252" r="5" fill="#2a3a4b"/>
+        <text x="828" y="248" fill="#e6edf3" font-size="13" font-weight="600">currency_exchange</text>
+        <text x="828" y="266" fill="#4d6276" font-size="10">USD → NIS</text>
+      </g>
+      <g id="tool3" opacity=".55">
+        <rect class="tBox" x="790" y="288" width="234" height="36" rx="10" fill="#121c28" stroke="#2a3a4b"/>
+        <text x="828" y="311" fill="#4d6276" font-size="11">+ geocode · country_flag</text>
+      </g>
+
+      <text x="907" y="352" fill="#8297ab" font-size="12" text-anchor="middle" letter-spacing="2">TOOLS</text>
+      <text x="907" y="368" fill="#4d6276" font-size="10" text-anchor="middle">agentTools[]</text>
+    </g>
+
+    <!-- moving packet -->
+    <g id="packet" opacity="0">
+      <rect id="pill" x="-90" y="-42" width="180" height="26" rx="13" fill="#16212d" stroke="#5cc8ff" stroke-width="1.6"/>
+      <text id="pillText" x="0" y="-24" fill="#5cc8ff" font-size="11" font-weight="500" text-anchor="middle"></text>
+      <circle id="dot" r="8" fill="#5cc8ff" filter="url(#glow)"/>
+    </g>
+
+    <!-- success toast -->
+    <g id="toast" opacity="0" transform="translate(540 52)">
+      <g id="toastInner">
+        <rect id="toastBg" x="-130" y="-22" width="260" height="44" rx="22" fill="#3ddc97" filter="url(#glow)"/>
+        <circle cx="-104" cy="0" r="12" fill="#0f1720"/>
+        <path d="M-109 0l4 4 8-9" fill="none" stroke="#3ddc97" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+        <text id="toastText" x="10" y="5" fill="#0f1720" font-size="14" font-weight="600" text-anchor="middle">Plan ready</text>
+      </g>
+    </g>
+  </svg>
+  </div>
+
+  <div class="caption" aria-live="polite">
+    <span class="n" id="stepN">0</span>
+    <p id="stepText">A trip request is about to leave the chatbot…</p>
+  </div>
+  <div class="rail" id="rail"><div></div><div></div><div></div><div></div><div></div><div></div><div></div></div>
+
+  <div class="controls">
+    <button class="primary" id="play" type="button">Pause</button>
+    <button id="replay" type="button">Replay</button>
+    <div class="sound" role="group" aria-label="Sound">
+      Sound
+      <button type="button" id="soundBtn" aria-pressed="true">On</button>
+    </div>
+    <div class="speed" role="group" aria-label="Speed">Speed
+      <button type="button" data-s="0.5" aria-pressed="false">0.5×</button>
+      <button type="button" data-s="1" aria-pressed="true">1×</button>
+      <button type="button" data-s="1.5" aria-pressed="false">1.5×</button>
+    </div>
+  </div>
+
+  <section class="anatomy" aria-label="Static overview of the lab 6 request path">
+    <h2>The same hop, at a glance</h2>
+    <div class="flow">
+      <svg viewBox="0 0 1080 150" role="img" aria-label="Client posts to API, API invokes agent, agent calls tools, response returns">
+        <rect width="1080" height="150" fill="#16212d"/>
+        <g>
+          <rect x="36" y="34" width="170" height="70" rx="12" fill="#0f1720" stroke="#5cc8ff" stroke-width="1.5"/>
+          <text x="121" y="64" fill="#5cc8ff" font-size="14" text-anchor="middle" font-weight="600">Client</text>
+          <text x="121" y="84" fill="#8297ab" font-size="11" text-anchor="middle">chatbot UI</text>
+        </g>
+        <g>
+          <rect x="268" y="34" width="170" height="70" rx="12" fill="#0f1720" stroke="#ffb547" stroke-width="1.5"/>
+          <text x="353" y="64" fill="#ffb547" font-size="14" text-anchor="middle" font-weight="600">API</text>
+          <text x="353" y="84" fill="#8297ab" font-size="11" text-anchor="middle">POST /api/chat</text>
+        </g>
+        <g>
+          <rect x="500" y="34" width="170" height="70" rx="12" fill="#0f1720" stroke="#3ddc97" stroke-width="1.5"/>
+          <text x="585" y="64" fill="#3ddc97" font-size="14" text-anchor="middle" font-weight="600">Agent</text>
+          <text x="585" y="84" fill="#8297ab" font-size="11" text-anchor="middle">invoke + loop</text>
+        </g>
+        <g>
+          <rect x="732" y="34" width="170" height="70" rx="12" fill="#0f1720" stroke="#b18cff" stroke-width="1.5"/>
+          <text x="817" y="64" fill="#b18cff" font-size="14" text-anchor="middle" font-weight="600">Tools</text>
+          <text x="817" y="84" fill="#8297ab" font-size="11" text-anchor="middle">flights · places · FX</text>
+        </g>
+        <path class="pipe-flow" d="M206 69 H268" fill="none" stroke="#5cc8ff" stroke-width="1.6"/>
+        <path d="M260 63 l8 6 l-8 6" fill="none" stroke="#5cc8ff" stroke-width="1.6"/>
+        <path class="pipe-flow" d="M438 69 H500" fill="none" stroke="#ffb547" stroke-width="1.6"/>
+        <path d="M492 63 l8 6 l-8 6" fill="none" stroke="#ffb547" stroke-width="1.6"/>
+        <path class="pipe-flow" d="M670 69 H732" fill="none" stroke="#b18cff" stroke-width="1.6"/>
+        <path d="M724 63 l8 6 l-8 6" fill="none" stroke="#b18cff" stroke-width="1.6"/>
+        <path class="pipe-flow" d="M902 69 H980" fill="none" stroke="#3ddc97" stroke-width="1.4" opacity=".5"/>
+        <text x="980" y="74" fill="#3ddc97" font-size="12">JSON → client</text>
+        <text x="121" y="130" fill="#4d6276" font-size="10" text-anchor="middle">client/</text>
+        <text x="353" y="130" fill="#4d6276" font-size="10" text-anchor="middle">server.ts</text>
+        <text x="585" y="130" fill="#4d6276" font-size="10" text-anchor="middle">flightPlannerAgent</text>
+        <text x="817" y="130" fill="#4d6276" font-size="10" text-anchor="middle">src/tools/</text>
+      </svg>
+    </div>
+    <div class="notes">
+      <p><strong>The API is the door</strong>The chatbot never talks to the model directly. It posts a message to <code>/api/chat</code>; Express builds the prompt and calls <code>flightPlannerAgent.invoke</code>.</p>
+      <p><strong>The agent chooses tools</strong>The model may call <code class="t">flight_finder</code>, <code>resolve_location</code>, <code>currency_exchange</code>, and friends — then it keeps looping until it can answer.</p>
+      <p><strong>The reply is structured</strong>The agent returns a JSON travel plan. The API can enrich places with coords and flags, then the client renders the trip.</p>
+    </div>
+  </section>
+</div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const REQ = '#5cc8ff', RES = '#ffb547', OK = '#3ddc97', TOOL = '#b18cff', LINE = '#2a3a4b';
+
+  const packet = $('packet'), pill = $('pill'), pillText = $('pillText'), dot = $('dot');
+  const toast = $('toast'), toastInner = $('toastInner'), toastText = $('toastText');
+  const stepN = $('stepN'), stepText = $('stepText');
+  const rail = [...$('rail').children];
+  const apiLeds = [...document.querySelectorAll('.apiLed')];
+  const agentLeds = [...document.querySelectorAll('.agentLed')];
+
+  // Soft ambient drift for the four large columns
+  const floaters = [
+    { id: 'client', amp: 3.2, speed: 0.22, phase: 0.1 },
+    { id: 'api', amp: 2.6, speed: 0.18, phase: 1.4 },
+    { id: 'agent', amp: 3.0, speed: 0.2, phase: 2.3 },
+    { id: 'tools', amp: 2.4, speed: 0.16, phase: 3.5 },
+  ];
+
+  const P = [
+    { k:'idle', d:1.1, step:0, txt:'A trip request is about to leave the chatbot…', tone:'rest' },
+    { k:'type', d:1.8, step:1, txt:'You ask for a trip — for example Tel Aviv to New York, food + culture, prices in NIS.', tone:'soft' },
+    { k:'toApi', d:1.9, step:2, from:[250,150], to:[308,150], label:'POST /api/chat', c:REQ, txt:'The client posts the message to <code>POST /api/chat</code>. That is the only door into the backend.', tone:'whoosh' },
+    { k:'api', d:1.7, step:2, txt:'Express reads the body, builds a full prompt, and prepares to call the agent — still no LLM yet.', tone:'blip' },
+    { k:'toAgent', d:1.9, step:3, from:[490,150], to:[548,150], label:'agent.invoke', c:RES, txt:'The API calls <code class="r">flightPlannerAgent.invoke</code> with your user message.', tone:'whoosh' },
+    { k:'think', d:1.8, step:3, txt:'The agent (LLM + system prompt) decides which tools it needs. It does not invent flight prices — it asks tools.', tone:'soft' },
+    { k:'toTools', d:2.0, step:4, from:[730,150], to:[790,132], label:'tool calls', c:TOOL, txt:'It reaches for tools: <code class="t">flight_finder</code>, <code class="t">resolve_location</code>, <code class="t">currency_exchange</code>…', tone:'whoosh' },
+    { k:'tools', d:2.2, step:4, txt:'Each tool runs real work — search flights, resolve map coords, convert USD → NIS — and returns structured results.', tone:'chime' },
+    { k:'fromTools', d:1.9, step:5, from:[790,192], to:[730,192], label:'tool results', c:OK, txt:'Tool results flow back into the agent. It may call more tools, or it may be ready to answer.', tone:'whoosh' },
+    { k:'plan', d:1.7, step:5, txt:'The agent writes a <code class="o">JSON</code> travel plan: flights, days, places, and prices.', tone:'soft' },
+    { k:'toApiBack', d:1.8, step:6, from:[530,260], to:[454,260], label:'plan JSON', c:OK, txt:'Control returns to the API. It parses the plan and can enrich places with coords and flags.', tone:'whoosh' },
+    { k:'enrich', d:1.5, step:6, txt:'The API finishes the payload — then sends <code>success: true</code> and the travel plan as JSON.', tone:'blip' },
+    { k:'toClient', d:2.0, step:7, from:[290,300], to:[232,220], label:'200 · plan', c:OK, txt:'The response reaches the chatbot. The UI can render the itinerary, map pins, and prices.', tone:'whoosh' },
+    { k:'done', d:2.8, step:7, txt:'Round trip complete: <strong>client → API → agent → tools → agent → API → client</strong>. Same path every request.', tone:'resolve' },
+  ];
+
+  const at = k => P.findIndex(p => p.k === k);
+  const total = P.reduce((a, p) => a + p.d, 0);
+  let t = 0, speed = 1, playing = true, last = null, soundOn = true;
+  let lastToneKey = null;
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  const ease = x => x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+  const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+  const back = x => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); };
+  const lerp = (a, b, u) => a + (b - a) * u;
+
+  /* ——— soft Web Audio ——— */
+  let audioCtx = null;
+  function ensureAudio(){
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    return audioCtx;
+  }
+
+  function tone(kind){
+    if (!soundOn || reduce) return;
+    try {
+      const ctx = ensureAudio();
+      const now = ctx.currentTime;
+      const master = ctx.createGain();
+      master.gain.value = 0.07;
+      master.connect(ctx.destination);
+
+      const beep = (freq, start, dur, type = 'sine', gain = 1) => {
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.type = type;
+        o.frequency.setValueAtTime(freq, now + start);
+        g.gain.setValueAtTime(0, now + start);
+        g.gain.linearRampToValueAtTime(0.9 * gain, now + start + 0.03);
+        g.gain.exponentialRampToValueAtTime(0.001, now + start + dur);
+        o.connect(g); g.connect(master);
+        o.start(now + start); o.stop(now + start + dur + 0.02);
+      };
+
+      if (kind === 'whoosh'){
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        const f = ctx.createBiquadFilter();
+        o.type = 'triangle';
+        o.frequency.setValueAtTime(220, now);
+        o.frequency.exponentialRampToValueAtTime(640, now + 0.42);
+        f.type = 'lowpass';
+        f.frequency.setValueAtTime(900, now);
+        f.frequency.exponentialRampToValueAtTime(1800, now + 0.4);
+        g.gain.setValueAtTime(0.0001, now);
+        g.gain.exponentialRampToValueAtTime(0.55, now + 0.08);
+        g.gain.exponentialRampToValueAtTime(0.001, now + 0.55);
+        o.connect(f); f.connect(g); g.connect(master);
+        o.start(now); o.stop(now + 0.58);
+      } else if (kind === 'blip'){
+        beep(520, 0, 0.18, 'sine', 0.7);
+        beep(780, 0.08, 0.16, 'sine', 0.45);
+      } else if (kind === 'chime'){
+        beep(523.25, 0, 0.35, 'sine', 0.55);
+        beep(659.25, 0.12, 0.4, 'sine', 0.45);
+        beep(783.99, 0.24, 0.5, 'triangle', 0.35);
+      } else if (kind === 'soft'){
+        beep(392, 0, 0.4, 'sine', 0.4);
+      } else if (kind === 'resolve'){
+        beep(392, 0, 0.35, 'sine', 0.45);
+        beep(523.25, 0.15, 0.4, 'sine', 0.5);
+        beep(659.25, 0.32, 0.55, 'triangle', 0.4);
+      } else if (kind === 'rest'){
+        beep(246.94, 0, 0.5, 'sine', 0.25);
+      }
+    } catch (_) { /* autoplay / unsupported */ }
+  }
+
+  function setStroke(el, color){ el.setAttribute('stroke', color); }
+
+  function lightTool(i, on, color){
+    const g = $('tool' + i);
+    if (!g) return;
+    const box = g.querySelector('.tBox');
+    const dotEl = g.querySelector('.tDot');
+    if (box) setStroke(box, on ? color : LINE);
+    if (dotEl) dotEl.setAttribute('fill', on ? color : LINE);
+  }
+
+  function render(){
+    let acc = 0, ph = P[0], idx = 0, local = 0;
+    for (let i = 0; i < P.length; i++){
+      if (t < acc + P[i].d || i === P.length - 1){
+        ph = P[i]; idx = i; local = clamp((t - acc) / ph.d); break;
+      }
+      acc += P[i].d;
+    }
+    const lt = local * ph.d;
+    const reached = k => idx > at(k) || ph.k === k;
+
+    // caption + rail
+    let tp = ph;
+    for (let i = idx; i >= 0 && !tp.txt; i--) tp = P[i];
+    stepN.textContent = ph.step;
+    if (stepText.innerHTML !== tp.txt) stepText.innerHTML = tp.txt;
+    rail.forEach((r, i) => {
+      r.className = i < ph.step ? 'on' + (ph.k === 'done' ? ' done' : '') : '';
+    });
+
+    // sound once per phase
+    const toneKey = ph.k + ':' + Math.floor(acc);
+    if (ph.tone && toneKey !== lastToneKey && local < 0.08){
+      lastToneKey = ph.k + ':' + idx;
+      tone(ph.tone);
+    }
+
+    // slow column drift
+    const drift = reduce ? 0 : 1;
+    floaters.forEach(f => {
+      const y = Math.sin(t * f.speed + f.phase) * f.amp * drift;
+      const x = Math.cos(t * f.speed * 0.7 + f.phase) * (f.amp * 0.35) * drift;
+      $(f.id).setAttribute('transform', `translate(${x.toFixed(2)} ${y.toFixed(2)})`);
+    });
+
+    // client bubble typing
+    const typed = idx > at('type') ? 1 : (ph.k === 'type' ? local : 0);
+    const msg = 'Tel Aviv → NYC';
+    $('userBubble').textContent = msg.slice(0, Math.max(1, Math.round(typed * msg.length)));
+    const clientHot = ph.k === 'type' || ph.k === 'toApi' || ph.k === 'toClient' || ph.k === 'done';
+    setStroke($('clientFrame'), ph.k === 'done' ? OK : (clientHot ? REQ : LINE));
+
+    // bot reply
+    const replyOn = reached('toClient');
+    $('botBubble').setAttribute('opacity', replyOn ? 1 : 0.45);
+    setStroke($('botBubble'), replyOn ? OK : LINE);
+    $('botLabel').setAttribute('fill', replyOn ? OK : '#4d6276');
+    $('botLine1').textContent = replyOn ? '3-day plan ready' : 'waiting…';
+    $('botLine1').setAttribute('fill', replyOn ? '#e6edf3' : '#4d6276');
+    $('botLine2').textContent = replyOn ? 'flights · NIS · map' : '';
+    $('botLine2').setAttribute('fill', replyOn ? OK : '#4d6276');
+
+    // API
+    const apiBusy = ['toApi','api','toAgent','toApiBack','enrich','toClient'].includes(ph.k);
+    apiLeds.forEach((l, i) => l.setAttribute('fill', apiBusy && Math.floor(t * 8 + i) % 3 === 0 ? REQ : LINE));
+    setStroke($('apiFrame'), apiBusy ? (ph.k.includes('Api') || ph.k === 'enrich' || ph.k === 'toClient' ? (ph.c || REQ) : RES) : (reached('toApi') ? '#1f4a66' : LINE));
+    setStroke($('routeCard'), reached('toApi') ? REQ : LINE);
+    $('routeText').setAttribute('fill', reached('toApi') ? REQ : '#e6edf3');
+    const enrichOn = reached('enrich');
+    $('enrichCard').setAttribute('opacity', enrichOn ? 1 : 0.5);
+    setStroke($('enrichCard'), enrichOn ? OK : LINE);
+    $('enrichText').textContent = enrichOn ? 'enriched · sending' : 'coords · flags';
+    $('enrichText').setAttribute('fill', enrichOn ? OK : '#4d6276');
+
+    // Agent
+    const agentBusy = ['toAgent','think','toTools','tools','fromTools','plan','toApiBack'].includes(ph.k);
+    agentLeds.forEach((l, i) => l.setAttribute('fill', agentBusy && Math.floor(t * 9 + i * 1.3) % 3 === 0 ? OK : LINE));
+    setStroke($('agentFrame'), agentBusy ? OK : (reached('toAgent') ? '#1f6b4d' : LINE));
+    setStroke($('thinkCard'), agentBusy ? OK : LINE);
+    const thinkLabels = {
+      think: 'choosing tools…',
+      toTools: 'calling tools',
+      tools: 'waiting on tools',
+      fromTools: 'reading results',
+      plan: 'writing JSON',
+      toAgent: 'waking up',
+    };
+    $('thinkText').textContent = thinkLabels[ph.k] || (reached('plan') ? 'done' : (reached('toAgent') ? 'ready' : 'idle'));
+    $('thinkText').setAttribute('fill', agentBusy || reached('plan') ? OK : '#e6edf3');
+    const planOn = reached('plan');
+    $('planCard').setAttribute('opacity', planOn ? 1 : 0.45);
+    setStroke($('planCard'), planOn ? OK : LINE);
+    $('planText').setAttribute('fill', planOn ? OK : '#4d6276');
+
+    // Tools highlight sequence
+    setStroke($('toolsFrame'), ['toTools','tools','fromTools'].includes(ph.k) ? TOOL : (reached('tools') ? '#4a356e' : LINE));
+    const toolPhase = ph.k === 'tools' ? local : (ph.k === 'toTools' ? local * 0.4 : (reached('tools') ? 1 : 0));
+    lightTool(0, toolPhase > 0.05 || ph.k === 'toTools', TOOL);
+    lightTool(1, toolPhase > 0.35, TOOL);
+    lightTool(2, toolPhase > 0.65, RES);
+    $('tool3').setAttribute('opacity', toolPhase > 0.8 || reached('fromTools') ? 1 : 0.55);
+
+    // packet travel
+    if (ph.from){
+      const e = ease(local);
+      const x = lerp(ph.from[0], ph.to[0], e);
+      const y = lerp(ph.from[1], ph.to[1], e);
+      packet.setAttribute('opacity', Math.min(1, local * 5, (1 - local) * 5 + 0.25));
+      packet.setAttribute('transform', `translate(${x} ${y})`);
+      const w = ph.label.length * 7.2 + 32;
+      pill.setAttribute('x', -w / 2);
+      pill.setAttribute('width', w);
+      pill.setAttribute('stroke', ph.c);
+      pillText.textContent = ph.label;
+      pillText.setAttribute('fill', ph.c);
+      dot.setAttribute('fill', ph.c);
+    } else {
+      packet.setAttribute('opacity', 0);
+    }
+
+    // toast
+    if (ph.k === 'done'){
+      const s = clamp(lt / 0.5), out = clamp((lt - (ph.d - 0.6)) / 0.45);
+      const label = 'Plan ready · client updated';
+      toastText.textContent = label;
+      const w = label.length * 8.2 + 70;
+      $('toastBg').setAttribute('x', -w / 2);
+      $('toastBg').setAttribute('width', w);
+      toastInner.querySelector('circle').setAttribute('cx', -w / 2 + 26);
+      toastInner.querySelector('path').setAttribute('d', `M${-w / 2 + 21} 0l4 4 8-9`);
+      toastText.setAttribute('x', 14);
+      toast.setAttribute('opacity', s * (1 - out));
+      toastInner.setAttribute('transform', `translate(0 ${(1 - s) * 16 - out * 10}) scale(${Math.max(back(s) * (1 - out * 0.15), 0.01)})`);
+      setStroke($('clientFrame'), OK);
+      setStroke($('apiFrame'), OK);
+      setStroke($('agentFrame'), OK);
+      setStroke($('toolsFrame'), OK);
+    } else {
+      toast.setAttribute('opacity', 0);
+    }
+  }
+
+  function frame(ts){
+    if (last == null) last = ts;
+    const dt = Math.min(0.1, (ts - last) / 1000);
+    last = ts;
+    if (playing){
+      t += dt * speed;
+      if (t >= total){ t = 0; lastToneKey = null; }
+    }
+    render();
+    requestAnimationFrame(frame);
+  }
+
+  const playBtn = $('play');
+  const sync = () => { playBtn.textContent = playing ? 'Pause' : 'Play'; };
+  playBtn.addEventListener('click', () => {
+    playing = !playing;
+    if (playing && soundOn) ensureAudio();
+    sync();
+  });
+  $('replay').addEventListener('click', () => {
+    t = 0; lastToneKey = null; playing = true;
+    if (soundOn) ensureAudio();
+    sync();
+  });
+  document.querySelectorAll('.speed button').forEach(b => b.addEventListener('click', () => {
+    speed = +b.dataset.s;
+    document.querySelectorAll('.speed button').forEach(x => x.setAttribute('aria-pressed', x === b));
+  }));
+
+  const soundBtn = $('soundBtn');
+  soundBtn.addEventListener('click', () => {
+    soundOn = !soundOn;
+    soundBtn.textContent = soundOn ? 'On' : 'Off';
+    soundBtn.setAttribute('aria-pressed', soundOn);
+    if (soundOn){ ensureAudio(); tone('soft'); }
+  });
+
+  // unlock audio on first gesture
+  const unlock = () => { if (soundOn) ensureAudio(); window.removeEventListener('pointerdown', unlock); };
+  window.addEventListener('pointerdown', unlock);
+
+  const jump = new URLSearchParams(location.search).get('at');
+  if (jump && at(jump) >= 0){
+    const i = at(jump);
+    t = P.slice(0, i).reduce((a, p) => a + p.d, 0) + P[i].d * 0.55;
+    playing = false;
+  } else if (reduce){
+    t = total - 1.4;
+    playing = false;
+  }
+  sync();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

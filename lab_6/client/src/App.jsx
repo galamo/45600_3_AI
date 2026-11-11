@@ -27,7 +27,8 @@ function App() {
   const [input, setInput] = useState('plan a trip to tokyo');
   const [loading, setLoading] = useState(false);
   const [flights, setFlights] = useState([]);
-  const [route, setRoute] = useState(null); // { from: { lat, lng, name }, to: { lat, lng, name } }
+  const [route, setRoute] = useState(null); // { from: { lat, lng, name, flag, countryCode }, to: ... }
+  const [mapOpen, setMapOpen] = useState(false);
   const [formData, setFormData] = useState({
     departure: 'tel aviv',
     destination: 'tokyo',
@@ -75,9 +76,18 @@ function App() {
         const toCoords = coordsFromPlace(response.to);
         if (fromCoords && toCoords) {
           setRoute({
-            from: { ...fromCoords, flag: response.from?.flag ?? null },
-            to: { ...toCoords, flag: response.to?.flag ?? null },
+            from: {
+              ...fromCoords,
+              flag: response.from?.flag ?? null,
+              countryCode: response.from?.countryCode ?? null,
+            },
+            to: {
+              ...toCoords,
+              flag: response.to?.flag ?? null,
+              countryCode: response.to?.countryCode ?? null,
+            },
           });
+          setMapOpen(true);
         }
       } else {
         throw new Error(data.error || 'Failed to get response');
@@ -237,63 +247,93 @@ function App() {
       </div>
 
       {route && (
-        <section className="route-map-section">
-          <h3 className="route-map-title">📍 Route</h3>
-          <div className="route-map-wrapper">
-            <MapContainer
-              center={[(route.from.lat + route.to.lat) / 2, (route.from.lng + route.to.lng) / 2]}
-              zoom={3}
-              className="route-map"
-              scrollWheelZoom={true}
-            >
-              <FitRouteBounds from={route.from} to={route.to} />
-              <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              />
-              <Polyline
-                positions={[
-                  [route.from.lat, route.from.lng],
-                  [route.to.lat, route.to.lng],
-                ]}
-                pathOptions={{ color: '#2563eb', weight: 3 }}
-              />
-              {route.from.flag ? (
-                <Marker
-                  position={[route.from.lat, route.from.lng]}
-                  icon={L.divIcon({
-                    className: 'flag-marker',
-                    html: `<img src="${route.from.flag}" alt="Origin" width="28" height="20" style="border-radius:2px;border:2px solid #059669;object-fit:cover;" />`,
-                    iconSize: [28, 20],
-                    iconAnchor: [14, 10],
-                  })}
-                >
-                  <Popup>{route.from.name || 'Origin'}</Popup>
-                </Marker>
-              ) : (
-                <CircleMarker center={[route.from.lat, route.from.lng]} pathOptions={{ color: '#059669', fillColor: '#10b981', fillOpacity: 1, weight: 2 }} radius={8}>
-                  <Popup>{route.from.name || 'Origin'}</Popup>
-                </CircleMarker>
+        <section className={`route-map-sheet ${mapOpen ? 'open' : ''}`}>
+          <button
+            type="button"
+            className="route-map-handle"
+            onClick={() => setMapOpen((open) => !open)}
+            aria-expanded={mapOpen}
+          >
+            <span className="route-map-handle-bar" />
+            <span className="route-map-title-text">
+              {route.from.flag && (
+                <img src={route.from.flag} alt="" className="route-flag-chip" />
               )}
-              {route.to.flag ? (
-                <Marker
-                  position={[route.to.lat, route.to.lng]}
-                  icon={L.divIcon({
-                    className: 'flag-marker',
-                    html: `<img src="${route.to.flag}" alt="Destination" width="28" height="20" style="border-radius:2px;border:2px solid #dc2626;object-fit:cover;" />`,
-                    iconSize: [28, 20],
-                    iconAnchor: [14, 10],
-                  })}
-                >
-                  <Popup>{route.to.name || 'Destination'}</Popup>
-                </Marker>
-              ) : (
-                <CircleMarker center={[route.to.lat, route.to.lng]} pathOptions={{ color: '#dc2626', fillColor: '#ef4444', fillOpacity: 1, weight: 2 }} radius={8}>
-                  <Popup>{route.to.name || 'Destination'}</Popup>
-                </CircleMarker>
+              {route.from.name || 'Origin'}
+              {route.from.countryCode ? ` (${route.from.countryCode})` : ''}
+              <span className="route-map-arrow">→</span>
+              {route.to.flag && (
+                <img src={route.to.flag} alt="" className="route-flag-chip" />
               )}
-            </MapContainer>
-          </div>
+              {route.to.name || 'Destination'}
+              {route.to.countryCode ? ` (${route.to.countryCode})` : ''}
+            </span>
+            <span className="route-map-toggle">{mapOpen ? 'Hide map' : 'Show map'}</span>
+          </button>
+          {mapOpen && (
+            <div className="route-map-wrapper">
+              <MapContainer
+                key={`${route.from.lat}-${route.to.lat}-${route.from.lng}-${route.to.lng}`}
+                center={[(route.from.lat + route.to.lat) / 2, (route.from.lng + route.to.lng) / 2]}
+                zoom={3}
+                className="route-map"
+                scrollWheelZoom={true}
+              >
+                <FitRouteBounds from={route.from} to={route.to} />
+                <TileLayer
+                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                />
+                <Polyline
+                  positions={[
+                    [route.from.lat, route.from.lng],
+                    [route.to.lat, route.to.lng],
+                  ]}
+                  pathOptions={{ color: '#2563eb', weight: 3 }}
+                />
+                {route.from.flag ? (
+                  <Marker
+                    position={[route.from.lat, route.from.lng]}
+                    icon={L.divIcon({
+                      className: 'flag-marker',
+                      html: `<img src="${route.from.flag}" alt="Origin" width="28" height="20" style="border-radius:2px;border:2px solid #059669;object-fit:cover;" />`,
+                      iconSize: [28, 20],
+                      iconAnchor: [14, 10],
+                    })}
+                  >
+                    <Popup>
+                      {route.from.name || 'Origin'}
+                      {route.from.countryCode ? ` (${route.from.countryCode})` : ''}
+                    </Popup>
+                  </Marker>
+                ) : (
+                  <CircleMarker center={[route.from.lat, route.from.lng]} pathOptions={{ color: '#059669', fillColor: '#10b981', fillOpacity: 1, weight: 2 }} radius={8}>
+                    <Popup>{route.from.name || 'Origin'}</Popup>
+                  </CircleMarker>
+                )}
+                {route.to.flag ? (
+                  <Marker
+                    position={[route.to.lat, route.to.lng]}
+                    icon={L.divIcon({
+                      className: 'flag-marker',
+                      html: `<img src="${route.to.flag}" alt="Destination" width="28" height="20" style="border-radius:2px;border:2px solid #dc2626;object-fit:cover;" />`,
+                      iconSize: [28, 20],
+                      iconAnchor: [14, 10],
+                    })}
+                  >
+                    <Popup>
+                      {route.to.name || 'Destination'}
+                      {route.to.countryCode ? ` (${route.to.countryCode})` : ''}
+                    </Popup>
+                  </Marker>
+                ) : (
+                  <CircleMarker center={[route.to.lat, route.to.lng]} pathOptions={{ color: '#dc2626', fillColor: '#ef4444', fillOpacity: 1, weight: 2 }} radius={8}>
+                    <Popup>{route.to.name || 'Destination'}</Popup>
+                  </CircleMarker>
+                )}
+              </MapContainer>
+            </div>
+          )}
         </section>
       )}
     </div>

@@ -2,6 +2,8 @@ export interface Coordinates {
   lat: number;
   lon: number;
   name: string;
+  countryCode?: string;
+  country?: string;
 }
 
 export interface FlightPlace {
@@ -11,7 +13,17 @@ export interface FlightPlace {
   lon?: number;
   latitude?: number;
   longitude?: number;
+  countryCode?: string;
   flag?: string | null;
+}
+
+export interface LocationInfo {
+  name: string;
+  lat: number;
+  lon: number;
+  countryCode: string;
+  country: string;
+  flag: string;
 }
 
 export interface Flight {
@@ -42,4 +54,5 @@ export interface FlightSearchParams {
 export interface CountryInfo {
   name: string;
   flag: string;
+  countryCode: string;
 }

@@ -22,5 +22,33 @@ export const currencyExchangeSchema = z.object({
     ),
 });
 
+export const geocodeLocationSchema = z.object({
+  placeName: z
+    .string()
+    .describe(
+      "City or airport name to geocode (e.g. Tel Aviv, Tokyo, New York)"
+    ),
+});
+
+export const countryFlagSchema = z.object({
+  countryCodeOrName: z
+    .string()
+    .describe(
+      "ISO 3166-1 alpha-2 country code (e.g. IL, JP, US) or country name (e.g. Israel, Japan)"
+    ),
+});
+
+export const resolveLocationSchema = z.object({
+  placeNames: z
+    .array(z.string())
+    .min(1)
+    .describe(
+      "List of city/airport names to resolve into coordinates, country code, and flag in one call. Pass both departure and destination together (e.g. [\"Tel Aviv\", \"Rome\"]) instead of resolving one at a time."
+    ),
+});
+
 export type FlightSearchInput = z.infer<typeof flightSearchSchema>;
 export type CurrencyExchangeInput = z.infer<typeof currencyExchangeSchema>;
+export type GeocodeLocationInput = z.infer<typeof geocodeLocationSchema>;
+export type CountryFlagInput = z.infer<typeof countryFlagSchema>;
+export type ResolveLocationInput = z.infer<typeof resolveLocationSchema>;
