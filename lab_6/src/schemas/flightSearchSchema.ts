@@ -14,9 +14,12 @@ export const flightSearchSchema = z.object({
 });
 
 export const currencyExchangeSchema = z.object({
-  priceInDollar: z
-    .string()
-    .describe("Price in US Dollars to convert to NIS/ILS"),
+  pricesInDollar: z
+    .array(z.string())
+    .min(1)
+    .describe(
+      "List of prices in US Dollars to convert to NIS/ILS in one call. Pass every distinct USD flight price together instead of converting one at a time."
+    ),
 });
 
 export type FlightSearchInput = z.infer<typeof flightSearchSchema>;

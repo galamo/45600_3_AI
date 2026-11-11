@@ -9,7 +9,7 @@ export const flightSearchTool = tool(
   {
     name: "flight_finder",
     description:
-      "Search for flight options between cities. Use this to find available flights, prices, airlines, flight numbers, and departure/arrival dates when planning travel.",
+      "Search for flight options between cities. Use this to find available flights, USD prices, airlines, flight numbers, and departure/arrival dates when planning travel. Prefer results that include explicit ticket prices in USD.",
     schema: flightSearchSchema,
   }
 );

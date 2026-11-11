@@ -8,6 +8,7 @@ const REST_COUNTRIES_BASE = "https://restcountries.com/v3.1/alpha";
 const webSearch = new TavilySearch({
   maxResults: 5,
   topic:  "general",
+  
 });
 
 export async function searchFlights({
@@ -16,8 +17,8 @@ export async function searchFlights({
   date,
 }: FlightSearchParams): Promise<string> {
   const query = date
-    ? `flights from ${origin} to ${destination} on ${date} flight numbers departure arrival dates`
-    : `flights from ${origin} to ${destination} flight numbers departure arrival dates`;
+    ? `cheap flights from ${origin} to ${destination} on ${date} USD prices flight numbers departure arrival dates`
+    : `cheap flights from ${origin} to ${destination} USD prices airlines flight numbers departure arrival dates`;
 
   const results = await webSearch.invoke({ query });
   console.log(JSON.stringify(results));
@@ -67,6 +68,10 @@ export function convertUsdToNis(priceInDollar: string): string {
   if (isNaN(price)) {
     return "Invalid price. Please provide a numeric value in USD.";
   }
-  const priceInNIS = Math.round(price * 3.2);
+  const priceInNIS = Math.round(price * 3.5);
   return `${price} USD = ${priceInNIS} NIS/ILS`;
+}
+
+export function convertUsdToNisBulk(pricesInDollar: string[]): string {
+  return pricesInDollar.map((price) => convertUsdToNis(price)).join("\n");
 }

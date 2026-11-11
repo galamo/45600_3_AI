@@ -97,3 +97,6 @@ app.listen(PORT, "0.0.0.0", () => {
     story: `http://localhost:${PORT}/api/story`,
   });
 });
+
+
+console.log("Server is running on port", PORT);

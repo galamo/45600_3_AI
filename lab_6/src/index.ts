@@ -2,7 +2,7 @@ import "dotenv/config";
 
 export { flightPlannerAgent, printAgentRunSummary, runTravelPlanner } from "./agents/flightPlannerAgent.js";
 export { flightSearchTool, currencyExchangeTool, agentTools } from "./tools/index.js";
-export { searchFlights, fetchCoordinates, fetchCountryFlag, convertUsdToNis } from "./services/flightApiService.js";
+export { searchFlights, fetchCoordinates, fetchCountryFlag, convertUsdToNis, convertUsdToNisBulk } from "./services/flightApiService.js";
 export { FLIGHT_PLANNER_PROMPT, buildFlightPlannerPrompt } from "./prompts/flightPlannerPrompt.js";
 export type { Flight, FlightPlace, TravelPlanResponse, Coordinates, FlightSearchParams } from "./types/flight.js";
 
