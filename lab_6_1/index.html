@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Image Vision Agent</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600&family=Syne:wght@600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/public/css/styles.css" />
+  </head>
+  <body>
+    <div class="bg-grid" aria-hidden="true"></div>
+
+    <main class="shell">
+      <header class="hero">
+        <p class="brand">lab_6_1</p>
+        <h1>Image Vision Agent</h1>
+        <p class="lede">
+          Upload one PNG or JPEG (≤1MB). The agent returns tags and a short
+          description.
+        </p>
+      </header>
+
+      <form id="upload-form" class="upload-form" novalidate>
+        <label class="dropzone" for="image-input">
+          <input
+            id="image-input"
+            name="image"
+            type="file"
+            accept="image/png,image/jpeg"
+            required
+          />
+          <span class="dropzone-title">Choose an image</span>
+          <span class="dropzone-hint">PNG or JPEG · max 1MB</span>
+          <span class="file-name" id="file-name" hidden></span>
+        </label>
+
+        <div class="actions">
+          <button type="submit" class="btn-primary" id="submit-btn">
+            Analyze
+          </button>
+        </div>
+
+        <p class="alert" id="error-alert" role="alert" hidden></p>
+        <p class="status" id="status" hidden>Analyzing image…</p>
+      </form>
+
+      <section class="results" id="results" hidden aria-live="polite">
+        <figure class="preview">
+          <img id="preview-img" alt="Uploaded image preview" />
+        </figure>
+
+        <div class="tags-block">
+          <h2>Tags</h2>
+          <ul class="tag-list" id="tag-list"></ul>
+        </div>
+
+        <div class="explain-block">
+          <button type="button" class="btn-ghost" id="explain-btn" aria-expanded="false">
+            Explain
+          </button>
+          <p class="description" id="description" hidden></p>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="/public/js/app.js"></script>
+  </body>
+</html>

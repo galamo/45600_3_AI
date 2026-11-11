@@ -1,0 +1,24 @@
+{
+  "name": "lab_6_1",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Image vision agent lab — Express + LangChain OpenRouter",
+  "scripts": {
+    "dev": "node --watch server.js",
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@langchain/core": "^1.1.48",
+    "@langchain/openrouter": "^0.3.0",
+    "cors": "^2.8.6",
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0",
+    "langchain": "^1.4.4",
+    "multer": "^2.0.2",
+    "zod": "^4.1.5"
+  }
+}
