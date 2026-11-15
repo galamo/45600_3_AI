@@ -9,11 +9,25 @@ import {
 } from "../schemas/aiAuthenticitySchema.js";
 import { imageToBase64DataUrl } from "../lib/vision.js";
 
+/** Defaults tuned from lab rankings: gpt-5.6-sol > gpt-6-astra; keep DeepSeek + Claude as dissenters. */
 const DEFAULT_MODELS = {
   A: "openai/gpt-5.6-sol",
   B: "deepseek/deepseek-v4.1-flash-1017",
   C: "anthropic/claude-sonnet-5.5",
 };
+
+/** Soft-cap overconfident votes (rankings: high-conf "real" drowned correct AI dissenters). */
+const CONFIDENCE_CAP = 0.85;
+/** Spread (max−min aiLikelihood) that counts as strong model disagreement. */
+const DISAGREE_SPREAD = 40;
+/** Minimum top aiLikelihood to treat a dissenting AI vote as meaningful. */
+const STRONG_AI_VOTE = 70;
+/**
+ * Verdict thresholds — tightened vs original 40/60 because false negatives
+ * dominated user labels (AI images scored ~20–35 overall).
+ */
+const VERDICT_REAL_MAX = 35;
+const VERDICT_INCONCLUSIVE_MAX = 55;
 
 /**
  * @returns {string[]}
@@ -97,7 +111,69 @@ async function assessmentUsingModel(modelName, dataUrl, apiKey) {
 }
 
 /**
+ * Soften and cap confidence so one overconfident model cannot dominate.
+ * @param {number} confidence
+ */
+function effectiveConfidence(confidence) {
+  const capped = Math.min(Math.max(confidence, 0), CONFIDENCE_CAP);
+  return Math.sqrt(capped);
+}
+
+/**
+ * Confidence-weighted mean using softened confidence.
+ * @param {Array<{ aiLikelihood: number, confidence: number }>} assessments
+ */
+function weightedLikelihood(assessments) {
+  const weights = assessments.map((a) => effectiveConfidence(a.confidence));
+  const weightSum = weights.reduce((sum, w) => sum + w, 0);
+  if (weightSum === 0) {
+    return (
+      assessments.reduce((sum, a) => sum + a.aiLikelihood, 0) /
+      assessments.length
+    );
+  }
+  return (
+    assessments.reduce(
+      (sum, a, i) => sum + a.aiLikelihood * weights[i],
+      0,
+    ) / weightSum
+  );
+}
+
+/**
+ * When models strongly disagree and at least one casts a strong AI vote,
+ * blend toward that vote so a high-conf "real" majority cannot bury it.
+ * @param {Array<{ aiLikelihood: number, confidence: number }>} assessments
+ * @param {number} weighted
+ */
+function applyDisagreementAiBoost(assessments, weighted) {
+  const scores = assessments.map((a) => a.aiLikelihood);
+  const max = Math.max(...scores);
+  const min = Math.min(...scores);
+  const mid = [...scores].sort((a, b) => a - b)[1];
+  if (max - min >= DISAGREE_SPREAD && max >= STRONG_AI_VOTE) {
+    return 0.35 * weighted + 0.45 * max + 0.2 * mid;
+  }
+  return weighted;
+}
+
+/**
+ * Map overall score → verdict (thresholds tuned from classification rankings).
+ * @param {number} overallAiLikelihood
+ * @returns {"likely_real" | "inconclusive" | "likely_ai"}
+ */
+export function likelihoodToVerdict(overallAiLikelihood) {
+  if (overallAiLikelihood <= VERDICT_REAL_MAX) return "likely_real";
+  if (overallAiLikelihood <= VERDICT_INCONCLUSIVE_MAX) return "inconclusive";
+  return "likely_ai";
+}
+
+/**
  * Confidence-weighted aggregate of three assessments (code-owned scores).
+ * Uses capped/sqrt confidence and an AI-leaning disagreement boost — ranking
+ * data showed false negatives when one model correctly scored AI highly but
+ * two overconfident "real" votes won the plain weighted average.
+ *
  * @param {Array<{ model: string, aiLikelihood: number, confidence: number, signals: string[], reason: string }>} assessments
  */
 export function aggregateAssessments(assessments) {
@@ -107,31 +183,11 @@ export function aggregateAssessments(assessments) {
     );
   }
 
-  const confidenceSum = assessments.reduce((sum, a) => sum + a.confidence, 0);
-  let overallAiLikelihood;
-  if (confidenceSum === 0) {
-    overallAiLikelihood = Math.round(
-      assessments.reduce((sum, a) => sum + a.aiLikelihood, 0) /
-        assessments.length,
-    );
-  } else {
-    overallAiLikelihood = Math.round(
-      assessments.reduce(
-        (sum, a) => sum + a.aiLikelihood * a.confidence,
-        0,
-      ) / confidenceSum,
-    );
-  }
-
-  /** @type {"likely_real" | "inconclusive" | "likely_ai"} */
-  let verdict;
-  if (overallAiLikelihood <= 40) {
-    verdict = "likely_real";
-  } else if (overallAiLikelihood <= 60) {
-    verdict = "inconclusive";
-  } else {
-    verdict = "likely_ai";
-  }
+  const weighted = weightedLikelihood(assessments);
+  const overallAiLikelihood = Math.round(
+    Math.min(100, Math.max(0, applyDisagreementAiBoost(assessments, weighted))),
+  );
+  const verdict = likelihoodToVerdict(overallAiLikelihood);
 
   const signalCounts = new Map();
   for (const a of assessments) {
@@ -147,10 +203,17 @@ export function aggregateAssessments(assessments) {
     .slice(0, 3);
 
   const scores = assessments.map((a) => a.aiLikelihood).join(", ");
+  const spread =
+    Math.max(...assessments.map((a) => a.aiLikelihood)) -
+    Math.min(...assessments.map((a) => a.aiLikelihood));
+  const disagreeNote =
+    spread >= DISAGREE_SPREAD
+      ? ` Strong model disagreement (spread ${spread}); AI-leaning blend applied.`
+      : "";
   const summary =
     recurring.length > 0
-      ? `Models scored ${scores}; recurring cues: ${recurring.join(", ")}. Weighted overall ${overallAiLikelihood} → ${verdict}.`
-      : `Models scored ${scores} with limited shared cues. Weighted overall ${overallAiLikelihood} → ${verdict}.`;
+      ? `Models scored ${scores}; recurring cues: ${recurring.join(", ")}. Weighted overall ${overallAiLikelihood} → ${verdict}.${disagreeNote}`
+      : `Models scored ${scores} with limited shared cues. Weighted overall ${overallAiLikelihood} → ${verdict}.${disagreeNote}`;
 
   return aiAuthenticitySchema.parse({
     overallAiLikelihood,

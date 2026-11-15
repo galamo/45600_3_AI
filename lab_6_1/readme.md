@@ -29,11 +29,14 @@ npm start
 
 ## Env
 
-| Variable                  | Description                            |
-| ------------------------- | -------------------------------------- |
-| `OPENROUTER_API_KEY`      | Required OpenRouter API key            |
-| `OPENROUTER_VISION_MODEL` | Vision model (default `openai/gpt-4o`) |
-| `PORT`                    | Server port (default `3000`)           |
+| Variable                   | Description |
+| -------------------------- | ----------- |
+| `OPENROUTER_API_KEY`       | Required OpenRouter API key |
+| `OPENROUTER_VISION_MODEL`  | Main vision model (default `google/gemini-3.8-flash`) |
+| `OPENROUTER_AUTH_MODEL_A`  | Auth model A (default `openai/gpt-5.6-sol`) |
+| `OPENROUTER_AUTH_MODEL_B`  | Auth model B (default `deepseek/deepseek-v4.1-flash-1017`) |
+| `OPENROUTER_AUTH_MODEL_C`  | Auth model C (default `anthropic/claude-sonnet-5.5`) |
+| `PORT`                     | Server port (default `3000`) |
 
 ## API
 
