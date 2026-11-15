@@ -16,6 +16,11 @@
     <div class="bg-grid" aria-hidden="true"></div>
 
     <main class="shell">
+      <nav class="top-nav" aria-label="Primary">
+        <a href="/" aria-current="page">Analyze</a>
+        <a href="/assessment">Agent assessment</a>
+      </nav>
+
       <header class="hero">
         <p class="brand">lab_6_1</p>
         <h1>Image Vision Agent</h1>
@@ -82,6 +87,24 @@
           <p class="auth-score" id="auth-score"></p>
           <p class="auth-summary" id="auth-summary"></p>
           <ul class="auth-assessments" id="auth-assessments"></ul>
+
+          <form class="user-classify" id="user-classify-form" hidden>
+            <label for="user-classification">
+              Your classification
+              <span class="field-hint">Strong label only — no inconclusive</span>
+            </label>
+            <div class="classify-row">
+              <select id="user-classification" name="userClassification" required>
+                <option value="" disabled selected>Select…</option>
+                <option value="likely_real">Likely real (not AI)</option>
+                <option value="likely_ai">Likely AI (created / edited by AI)</option>
+              </select>
+              <button type="submit" class="btn-primary" id="classify-btn">
+                Save classification
+              </button>
+            </div>
+            <p class="classify-status" id="classify-status" hidden></p>
+          </form>
         </div>
       </section>
     </main>

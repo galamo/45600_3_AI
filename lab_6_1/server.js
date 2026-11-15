@@ -14,11 +14,18 @@ import {
   ensureUploadsDir,
   uniqueUploadFilename,
 } from "./src/lib/saveUploadedImage.js";
+import {
+  buildAssessmentStats,
+  ensureDataDir,
+  readClassifications,
+  saveUserClassification,
+} from "./src/lib/classificationsStore.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const port = Number(process.env.PORT) || 3000;
 
 await ensureUploadsDir(UPLOADS_DIR);
+await ensureDataDir();
 
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => {
@@ -71,12 +78,66 @@ function parseIsAiAuthenticity(value) {
 const app = express();
 
 app.use(cors());
+app.use(express.json({ limit: "1mb" }));
 app.use("/uploads", express.static(UPLOADS_DIR));
 app.use("/public", express.static(path.join(__dirname, "public")));
 app.use(express.static(__dirname));
 
 app.get("/api/health", (_req, res) => {
   res.json({ status: "ok" });
+});
+
+app.get("/assessment", (_req, res) => {
+  res.sendFile(path.join(__dirname, "assessment.html"));
+});
+
+app.get("/api/classifications", async (req, res) => {
+  try {
+    const records = await readClassifications();
+    const filters = {
+      userClassification:
+        typeof req.query.userClassification === "string"
+          ? req.query.userClassification
+          : undefined,
+      model: typeof req.query.model === "string" ? req.query.model : undefined,
+    };
+    if (
+      filters.userClassification &&
+      filters.userClassification !== "likely_real" &&
+      filters.userClassification !== "likely_ai"
+    ) {
+      res.status(400).json({
+        error: "userClassification must be likely_real or likely_ai",
+      });
+      return;
+    }
+    res.json({
+      success: true,
+      ...buildAssessmentStats(records, filters),
+    });
+  } catch (err) {
+    const message = err?.message || String(err);
+    console.error("Failed to read classifications:", message);
+    res.status(500).json({ error: message });
+  }
+});
+
+app.post("/api/classifications", async (req, res) => {
+  try {
+    const record = await saveUserClassification(req.body);
+    res.status(201).json({ success: true, record });
+  } catch (err) {
+    const message = err?.message || String(err);
+    const isValidation =
+      err?.name === "ZodError" ||
+      Array.isArray(err?.issues) ||
+      /invalid|expected|required/i.test(message);
+    console.error("Failed to save classification:", message);
+    res.status(isValidation ? 400 : 500).json({
+      error: isValidation ? "Invalid classification payload" : message,
+      details: err?.issues || [],
+    });
+  }
 });
 
 app.post("/upload-image", (req, res) => {
@@ -122,6 +183,7 @@ app.post("/upload-image", (req, res) => {
       /** @type {Record<string, unknown>} */
       const payload = {
         success: true,
+        imageId: filename,
         imageUrl,
         tags: result.tags,
         description: result.description,
@@ -165,6 +227,9 @@ if (isMainModule) {
     console.log(`Vision agent listening on http://localhost:${port}`);
     console.log(`GET  /api/health`);
     console.log(`POST /upload-image — multipart field "image"`);
+    console.log(`POST /api/classifications — save user AI/real label`);
+    console.log(`GET  /api/classifications — assessment stats`);
+    console.log(`GET  /assessment — agent vs user charts`);
     console.log(`GET  / — dark UI (index.html)`);
   });
 }

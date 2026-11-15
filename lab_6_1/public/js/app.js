@@ -18,9 +18,16 @@ const authVerdict = document.getElementById("auth-verdict");
 const authScore = document.getElementById("auth-score");
 const authSummary = document.getElementById("auth-summary");
 const authAssessments = document.getElementById("auth-assessments");
+const userClassifyForm = document.getElementById("user-classify-form");
+const userClassificationSelect = document.getElementById("user-classification");
+const classifyBtn = document.getElementById("classify-btn");
+const classifyStatus = document.getElementById("classify-status");
 
 /** @type {string | null} */
 let stashedDescription = null;
+
+/** @type {{ imageId: string, imageUrl: string, aiAuthenticity: object } | null} */
+let pendingClassification = null;
 
 function showError(message) {
   errorAlert.textContent = message;
@@ -65,18 +72,30 @@ function resetExplain() {
   explainBtn.textContent = "Explain";
 }
 
+function resetUserClassify() {
+  pendingClassification = null;
+  userClassifyForm.hidden = true;
+  userClassificationSelect.value = "";
+  classifyBtn.disabled = false;
+  classifyStatus.hidden = true;
+  classifyStatus.textContent = "";
+  classifyStatus.classList.remove("is-success", "is-error");
+}
+
 function hideAuthBlock() {
   authBlock.hidden = true;
   authVerdict.textContent = "";
   authScore.textContent = "";
   authSummary.textContent = "";
   authAssessments.innerHTML = "";
+  resetUserClassify();
 }
 
 /**
  * @param {object | undefined} auth
+ * @param {{ imageId: string, imageUrl: string }} meta
  */
-function renderAuthBlock(auth) {
+function renderAuthBlock(auth, meta) {
   if (!auth || typeof auth !== "object") {
     hideAuthBlock();
     return;
@@ -107,11 +126,23 @@ function renderAuthBlock(auth) {
     authAssessments.appendChild(li);
   }
 
+  pendingClassification = {
+    imageId: meta.imageId,
+    imageUrl: meta.imageUrl,
+    aiAuthenticity: auth,
+  };
+  userClassifyForm.hidden = false;
+  userClassificationSelect.value = "";
+  classifyBtn.disabled = false;
+  classifyStatus.hidden = true;
+  classifyStatus.textContent = "";
+  classifyStatus.classList.remove("is-success", "is-error");
+
   authBlock.hidden = false;
 }
 
 /**
- * @param {{ imageUrl: string, tags: string[], description: string, aiAuthenticity?: object }} data
+ * @param {{ imageId: string, imageUrl: string, tags: string[], description: string, aiAuthenticity?: object }} data
  */
 function renderResults(data) {
   previewImg.src = data.imageUrl;
@@ -126,7 +157,10 @@ function renderResults(data) {
   descriptionEl.textContent = data.description;
   explainBtn.setAttribute("aria-expanded", "false");
   explainBtn.textContent = "Explain";
-  renderAuthBlock(data.aiAuthenticity);
+  renderAuthBlock(data.aiAuthenticity, {
+    imageId: data.imageId,
+    imageUrl: data.imageUrl,
+  });
   results.hidden = false;
 }
 
@@ -150,6 +184,52 @@ explainBtn.addEventListener("click", () => {
   descriptionEl.hidden = !open;
   explainBtn.setAttribute("aria-expanded", String(open));
   explainBtn.textContent = open ? "Hide explanation" : "Explain";
+});
+
+userClassifyForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!pendingClassification) return;
+
+  const userClassification = userClassificationSelect.value;
+  if (
+    userClassification !== "likely_real" &&
+    userClassification !== "likely_ai"
+  ) {
+    classifyStatus.hidden = false;
+    classifyStatus.classList.remove("is-success");
+    classifyStatus.classList.add("is-error");
+    classifyStatus.textContent = "Choose Likely real or Likely AI.";
+    return;
+  }
+
+  classifyBtn.disabled = true;
+  classifyStatus.hidden = false;
+  classifyStatus.classList.remove("is-success", "is-error");
+  classifyStatus.textContent = "Saving…";
+
+  try {
+    const response = await fetch("/api/classifications", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        imageId: pendingClassification.imageId,
+        imageUrl: pendingClassification.imageUrl,
+        userClassification,
+        aiAuthenticity: pendingClassification.aiAuthenticity,
+      }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || `Save failed (${response.status})`);
+    }
+    classifyStatus.classList.add("is-success");
+    classifyStatus.textContent =
+      "Saved. View comparisons on Agent assessment.";
+  } catch (err) {
+    classifyBtn.disabled = false;
+    classifyStatus.classList.add("is-error");
+    classifyStatus.textContent = err?.message || String(err);
+  }
 });
 
 form.addEventListener("submit", async (event) => {
@@ -193,6 +273,7 @@ form.addEventListener("submit", async (event) => {
     }
 
     renderResults({
+      imageId: data.imageId,
       imageUrl: data.imageUrl,
       tags: data.tags,
       description: data.description,

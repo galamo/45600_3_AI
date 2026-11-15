@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Agent assessment — lab_6_1</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600&family=Syne:wght@600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/public/css/styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+  </head>
+  <body>
+    <div class="bg-grid" aria-hidden="true"></div>
+
+    <main class="shell shell-wide">
+      <nav class="top-nav" aria-label="Primary">
+        <a href="/">Analyze</a>
+        <a href="/assessment" aria-current="page">Agent assessment</a>
+      </nav>
+
+      <header class="hero">
+        <p class="brand">lab_6_1</p>
+        <h1>Agent assessment</h1>
+        <p class="lede">
+          Compare each model and the final agent verdict against your strong
+          AI / real labels.
+        </p>
+      </header>
+
+      <form class="filters" id="filters-form">
+        <label>
+          User label
+          <select id="filter-user" name="userClassification">
+            <option value="">All</option>
+            <option value="likely_real">Likely real</option>
+            <option value="likely_ai">Likely AI</option>
+          </select>
+        </label>
+        <label>
+          Model
+          <select id="filter-model" name="model">
+            <option value="">All models</option>
+          </select>
+        </label>
+        <label>
+          Show only wrong
+          <select id="filter-wrong" name="wrongOnly">
+            <option value="">All cases</option>
+            <option value="1">Agent wrong vs user</option>
+          </select>
+        </label>
+        <button type="submit" class="btn-ghost">Apply filters</button>
+      </form>
+
+      <p class="alert" id="assessment-error" role="alert" hidden></p>
+      <p class="status" id="assessment-status">Loading assessment data…</p>
+
+      <section class="stats-strip" id="stats-strip" hidden>
+        <div>
+          <span class="stat-value" id="stat-total">0</span>
+          <span class="stat-label">Images labeled</span>
+        </div>
+        <div>
+          <span class="stat-value" id="stat-wrong">0</span>
+          <span class="stat-label">Agent wrong vs user</span>
+        </div>
+        <div>
+          <span class="stat-value" id="stat-accuracy">0%</span>
+          <span class="stat-label">Agent accuracy</span>
+        </div>
+        <div>
+          <span class="stat-value" id="stat-inconclusive">0</span>
+          <span class="stat-label">Agent inconclusive</span>
+        </div>
+      </section>
+
+      <section class="charts" id="charts" hidden>
+        <article class="chart-card">
+          <h2>Per model vs user</h2>
+          <p class="chart-lede">
+            Agree / disagree counts for each vision model against your label.
+          </p>
+          <canvas id="chart-per-model" height="220"></canvas>
+        </article>
+
+        <article class="chart-card">
+          <h2>Final agent vs user</h2>
+          <p class="chart-lede">
+            Aggregated agent binary label (score ≤50 real / ≥51 AI) vs yours.
+          </p>
+          <canvas id="chart-agent-vs-user" height="220"></canvas>
+        </article>
+
+        <article class="chart-card">
+          <h2>Label distribution</h2>
+          <p class="chart-lede">Your labels vs agent verdicts (incl. inconclusive).</p>
+          <canvas id="chart-distribution" height="220"></canvas>
+        </article>
+
+        <article class="chart-card">
+          <h2>Model accuracy %</h2>
+          <p class="chart-lede">Share of cases each model matched your label.</p>
+          <canvas id="chart-model-accuracy" height="220"></canvas>
+        </article>
+      </section>
+
+      <section class="table-block" id="table-block" hidden>
+        <h2>Cases</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Image</th>
+                <th>User</th>
+                <th>Agent</th>
+                <th>Match</th>
+                <th>Models</th>
+              </tr>
+            </thead>
+            <tbody id="cases-body"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="/public/js/assessment.js"></script>
+  </body>
+</html>

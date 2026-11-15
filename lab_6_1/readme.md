@@ -38,24 +38,37 @@ npm start
 ## API
 
 - `GET /api/health` → `{ "status": "ok" }`
-- `POST /upload-image` — multipart field `image` (PNG/JPEG, ≤1MB)
+- `POST /upload-image` — multipart field `image` (PNG/JPEG, ≤5MB); optional `isAiAuthenticity`
+- `POST /api/classifications` — save user AI/real label + model rankings for an image
+- `GET /api/classifications` — assessment stats (`?userClassification=&model=`)
+- `GET /assessment` — Agent assessment charts UI
 
-Success response:
+Upload success response:
 
 ```json
 {
   "success": true,
+  "imageId": "....jpg",
   "imageUrl": "/uploads/....jpg",
   "tags": ["..."],
-  "description": "..."
+  "description": "...",
+  "aiAuthenticity": { "...": "optional when requested" }
 }
 ```
 
 Uploaded files are stored under `uploads/` and served at `/uploads/<filename>`.
+User classifications are stored in `data/classifications.json` (image id, user label, agent verdict, per-model rankings).
 
-# Ex_1
+## User classification & assessment
 
-1. User classification, after AI assesment, the user will classify AI/Not AI
-2. the Data will be saved inisde JSON file, image_id, user classification, AI classification
-3. Create new route to show the aggregative results, number of images, Model ranking, User classification
-4. first chart per model, second chart for all 3 models Vs the user classification
+After an authenticity run, the UI shows a dropdown with **strong labels only** (no inconclusive):
+
+- `likely_real` — not AI
+- `likely_ai` — created or edited by AI
+
+Saving posts those labels with the image id and each model’s ranking. Open **[Agent assessment](http://localhost:3000/assessment)** for:
+
+1. Per-model agree/disagree vs user
+2. Final agent result vs user (wrong-case count + accuracy)
+3. Label distribution and model accuracy %
+4. Filters by user label / model / wrong-only cases
