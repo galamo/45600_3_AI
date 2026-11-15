@@ -31,7 +31,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: 1_048_576 },
+  limits: { fileSize: 5_242_880 },
   fileFilter: (_req, file, cb) => {
     if (file.mimetype === "image/png" || file.mimetype === "image/jpeg") {
       cb(null, true);
@@ -40,6 +40,33 @@ const upload = multer({
     cb(new Error("Only PNG and JPEG images are allowed"));
   },
 });
+
+/**
+ * Coerce multipart form values to a real boolean. Default false.
+ * Accepts true/false booleans and string forms: "true"/"false"/"on"/"off"/"1"/"0".
+ *
+ * @param {unknown} value
+ * @returns {boolean}
+ */
+function parseIsAiAuthenticity(value) {
+  if (typeof value === "boolean") return value;
+  if (value == null) return false;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "true" || normalized === "on" || normalized === "1") {
+      return true;
+    }
+    if (
+      normalized === "false" ||
+      normalized === "off" ||
+      normalized === "0" ||
+      normalized === ""
+    ) {
+      return false;
+    }
+  }
+  return false;
+}
 
 const app = express();
 
@@ -60,10 +87,10 @@ app.post("/upload-image", (req, res) => {
         multerErr.code === "LIMIT_FILE_SIZE";
       res.status(400).json({
         error: isSize
-          ? "Image must be 1MB or smaller"
+          ? "Image must be 5MB or smaller"
           : multerErr.message || "Upload failed",
         details: isSize
-          ? [{ path: "image", message: "File exceeds 1MB limit" }]
+          ? [{ path: "image", message: "File exceeds 5MB limit" }]
           : [],
       });
       return;
@@ -75,15 +102,35 @@ app.post("/upload-image", (req, res) => {
       const filename = req.file.filename;
       const absolutePath = path.join(UPLOADS_DIR, filename);
       const imageUrl = `/uploads/${filename}`;
+      const isAiAuthenticity = parseIsAiAuthenticity(req.body?.isAiAuthenticity);
 
-      const { tags, description } = await analyzeImage(absolutePath);
+      if (typeof isAiAuthenticity !== "boolean") {
+        res.status(400).json({
+          error: "isAiAuthenticity must be a boolean",
+          details: [
+            {
+              path: "isAiAuthenticity",
+              message: "Expected boolean after form coercion",
+            },
+          ],
+        });
+        return;
+      }
 
-      res.json({
+      const result = await analyzeImage(absolutePath, { isAiAuthenticity });
+
+      /** @type {Record<string, unknown>} */
+      const payload = {
         success: true,
         imageUrl,
-        tags,
-        description,
-      });
+        tags: result.tags,
+        description: result.description,
+      };
+      if (result.aiAuthenticity) {
+        payload.aiAuthenticity = result.aiAuthenticity;
+      }
+
+      res.json(payload);
     } catch (err) {
       if (err instanceof ImageUploadValidationError) {
         res.status(400).json({ error: err.message, details: err.details });

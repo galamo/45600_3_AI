@@ -20,8 +20,8 @@
         <p class="brand">lab_6_1</p>
         <h1>Image Vision Agent</h1>
         <p class="lede">
-          Upload one PNG or JPEG (≤1MB). The agent returns tags and a short
-          description.
+          Upload one PNG or JPEG (≤5MB). The agent returns tags and a short
+          description. Optionally check if the image was made by AI.
         </p>
       </header>
 
@@ -35,8 +35,18 @@
             required
           />
           <span class="dropzone-title">Choose an image</span>
-          <span class="dropzone-hint">PNG or JPEG · max 1MB</span>
+          <span class="dropzone-hint">PNG or JPEG · max 5MB</span>
           <span class="file-name" id="file-name" hidden></span>
+        </label>
+
+        <label class="opt-in" for="ai-authenticity">
+          <input
+            id="ai-authenticity"
+            name="isAiAuthenticity"
+            type="checkbox"
+            value="true"
+          />
+          <span>Check if this image was made by AI</span>
         </label>
 
         <div class="actions">
@@ -64,6 +74,14 @@
             Explain
           </button>
           <p class="description" id="description" hidden></p>
+        </div>
+
+        <div class="auth-block" id="auth-block" hidden>
+          <h2>AI authenticity</h2>
+          <p class="auth-verdict" id="auth-verdict"></p>
+          <p class="auth-score" id="auth-score"></p>
+          <p class="auth-summary" id="auth-summary"></p>
+          <ul class="auth-assessments" id="auth-assessments"></ul>
         </div>
       </section>
     </main>

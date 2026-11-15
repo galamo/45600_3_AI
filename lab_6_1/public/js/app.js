@@ -1,8 +1,9 @@
-const MAX_BYTES = 1_048_576;
+const MAX_BYTES = 5_242_880;
 const ALLOWED_TYPES = new Set(["image/png", "image/jpeg"]);
 
 const form = document.getElementById("upload-form");
 const imageInput = document.getElementById("image-input");
+const aiAuthenticityInput = document.getElementById("ai-authenticity");
 const fileNameEl = document.getElementById("file-name");
 const submitBtn = document.getElementById("submit-btn");
 const errorAlert = document.getElementById("error-alert");
@@ -12,6 +13,11 @@ const previewImg = document.getElementById("preview-img");
 const tagList = document.getElementById("tag-list");
 const explainBtn = document.getElementById("explain-btn");
 const descriptionEl = document.getElementById("description");
+const authBlock = document.getElementById("auth-block");
+const authVerdict = document.getElementById("auth-verdict");
+const authScore = document.getElementById("auth-score");
+const authSummary = document.getElementById("auth-summary");
+const authAssessments = document.getElementById("auth-assessments");
 
 /** @type {string | null} */
 let stashedDescription = null;
@@ -29,7 +35,11 @@ function clearError() {
 function setLoading(active) {
   submitBtn.disabled = active;
   imageInput.disabled = active;
+  aiAuthenticityInput.disabled = active;
   statusEl.hidden = !active;
+  statusEl.textContent = aiAuthenticityInput.checked
+    ? "Analyzing image and AI authenticity…"
+    : "Analyzing image…";
 }
 
 /**
@@ -42,7 +52,7 @@ function validateClientFile(file) {
     return "Only PNG and JPEG images are allowed.";
   }
   if (file.size > MAX_BYTES) {
-    return "Image must be 1MB or smaller.";
+    return "Image must be 5MB or smaller.";
   }
   return null;
 }
@@ -55,8 +65,53 @@ function resetExplain() {
   explainBtn.textContent = "Explain";
 }
 
+function hideAuthBlock() {
+  authBlock.hidden = true;
+  authVerdict.textContent = "";
+  authScore.textContent = "";
+  authSummary.textContent = "";
+  authAssessments.innerHTML = "";
+}
+
 /**
- * @param {{ imageUrl: string, tags: string[], description: string }} data
+ * @param {object | undefined} auth
+ */
+function renderAuthBlock(auth) {
+  if (!auth || typeof auth !== "object") {
+    hideAuthBlock();
+    return;
+  }
+
+  const verdictLabel = String(auth.verdict || "")
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+
+  authVerdict.textContent = `Verdict: ${verdictLabel}`;
+  authVerdict.dataset.verdict = auth.verdict || "";
+  authScore.textContent = `Overall AI likelihood: ${auth.overallAiLikelihood}/100`;
+  authSummary.textContent = auth.summary || "";
+
+  authAssessments.innerHTML = "";
+  const assessments = Array.isArray(auth.assessments) ? auth.assessments : [];
+  for (const item of assessments) {
+    const li = document.createElement("li");
+    const signals = Array.isArray(item.signals)
+      ? item.signals.join(", ")
+      : "";
+    li.innerHTML = `
+      <strong>${item.model || "model"}</strong>
+      <span>${item.aiLikelihood}/100 · confidence ${item.confidence}</span>
+      ${signals ? `<span class="auth-signals">${signals}</span>` : ""}
+      ${item.reason ? `<span class="auth-reason">${item.reason}</span>` : ""}
+    `;
+    authAssessments.appendChild(li);
+  }
+
+  authBlock.hidden = false;
+}
+
+/**
+ * @param {{ imageUrl: string, tags: string[], description: string, aiAuthenticity?: object }} data
  */
 function renderResults(data) {
   previewImg.src = data.imageUrl;
@@ -71,6 +126,7 @@ function renderResults(data) {
   descriptionEl.textContent = data.description;
   explainBtn.setAttribute("aria-expanded", "false");
   explainBtn.textContent = "Explain";
+  renderAuthBlock(data.aiAuthenticity);
   results.hidden = false;
 }
 
@@ -101,6 +157,7 @@ form.addEventListener("submit", async (event) => {
   clearError();
   results.hidden = true;
   resetExplain();
+  hideAuthBlock();
 
   const file = imageInput.files?.[0];
   const validationError = validateClientFile(file);
@@ -111,6 +168,10 @@ form.addEventListener("submit", async (event) => {
 
   const body = new FormData();
   body.append("image", file);
+  body.append(
+    "isAiAuthenticity",
+    aiAuthenticityInput.checked ? "true" : "false",
+  );
 
   setLoading(true);
   try {
@@ -135,6 +196,7 @@ form.addEventListener("submit", async (event) => {
       imageUrl: data.imageUrl,
       tags: data.tags,
       description: data.description,
+      aiAuthenticity: data.aiAuthenticity,
     });
   } catch (err) {
     showError(err?.message || String(err));

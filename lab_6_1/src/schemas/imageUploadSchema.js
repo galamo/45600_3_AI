@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 const ALLOWED_MIMETYPES = ["image/png", "image/jpeg"];
-const MAX_BYTES = 1_048_576;
+const MAX_BYTES = 5_242_880;
 
 export const imageUploadSchema = z.object({
   mimetype: z.enum(ALLOWED_MIMETYPES, {
@@ -11,7 +11,7 @@ export const imageUploadSchema = z.object({
     .number()
     .int()
     .positive()
-    .max(MAX_BYTES, { error: "Image must be 1MB or smaller" }),
+    .max(MAX_BYTES, { error: "Image must be 5MB or smaller" }),
   originalname: z.string().min(1, { error: "originalname is required" }),
   filename: z.string().min(1, { error: "filename is required" }),
 });
