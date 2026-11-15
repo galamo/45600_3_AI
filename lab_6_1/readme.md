@@ -29,11 +29,11 @@ npm start
 
 ## Env
 
-| Variable | Description |
-| --- | --- |
-| `OPENROUTER_API_KEY` | Required OpenRouter API key |
+| Variable                  | Description                            |
+| ------------------------- | -------------------------------------- |
+| `OPENROUTER_API_KEY`      | Required OpenRouter API key            |
 | `OPENROUTER_VISION_MODEL` | Vision model (default `openai/gpt-4o`) |
-| `PORT` | Server port (default `3000`) |
+| `PORT`                    | Server port (default `3000`)           |
 
 ## API
 
@@ -52,3 +52,10 @@ Success response:
 ```
 
 Uploaded files are stored under `uploads/` and served at `/uploads/<filename>`.
+
+# Ex_1
+
+1. User classification, after AI assesment, the user will classify AI/Not AI
+2. the Data will be saved inisde JSON file, image_id, user classification, AI classification
+3. Create new route to show the aggregative results, number of images, Model ranking, User classification
+4. first chart per model, second chart for all 3 models Vs the user classification
