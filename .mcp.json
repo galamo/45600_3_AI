@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "ticket-mcp": {
+      "type": "http",
+      "url": "http://localhost:3300/mcp",
+      "headers": {
+        "Authorization": "Bearer dummy-ticket-token"
+      }
+    }
+  }
+}

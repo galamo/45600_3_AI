@@ -1,0 +1,16 @@
+{
+  "name": "lab9-ticket-mcp-server",
+  "version": "1.0.0",
+  "description": "Ticket management MCP server (Streamable HTTP) for Lab 9 - talks to the backend REST API",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.26.0",
+    "cors": "^2.8.5",
+    "express": "^4.21.0",
+    "zod": "^3.23.0"
+  }
+}

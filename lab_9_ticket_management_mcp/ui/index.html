@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ticket Board</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>Ticket Board</h1>
+    <button id="newTicketBtn" class="primary">+ New ticket</button>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <section class="panel">
+        <h2>Users</h2>
+        <ul id="userList" class="list"></ul>
+        <form id="userForm" class="stack">
+          <input name="name" placeholder="Name (optional)" />
+          <input name="email" type="email" placeholder="email@example.com" required />
+          <button type="submit">Add user</button>
+        </form>
+      </section>
+
+      <section class="panel">
+        <h2>Projects &amp; sprints</h2>
+        <ul id="projectList" class="list"></ul>
+        <form id="projectForm" class="row">
+          <input name="name" placeholder="New project" required />
+          <button type="submit">Add</button>
+        </form>
+        <form id="sprintForm" class="stack">
+          <select name="projectId" required></select>
+          <div class="row">
+            <input name="name" placeholder="New sprint" required />
+            <button type="submit">Add</button>
+          </div>
+        </form>
+      </section>
+    </aside>
+
+    <main>
+      <div class="filters">
+        <input id="fSearch" placeholder="Search title…" />
+        <select id="fProject"></select>
+        <select id="fSprint"></select>
+        <select id="fStatus"></select>
+        <select id="fAssignee"></select>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>#</th><th>Title</th><th>Project</th><th>Sprint</th><th>Status</th><th>Assignee</th><th></th></tr>
+          </thead>
+          <tbody id="ticketRows"></tbody>
+        </table>
+        <p id="emptyState" class="empty" hidden>No tickets match.</p>
+      </div>
+    </main>
+  </div>
+
+  <dialog id="ticketDialog">
+    <form id="ticketForm" method="dialog" class="stack">
+      <h2 id="dialogTitle">New ticket</h2>
+      <label>Title <input name="title" required /></label>
+      <label>Description <textarea name="description" rows="4"></textarea></label>
+      <div class="grid2">
+        <label>Project <select name="projectId"></select></label>
+        <label>Sprint <select name="sprintId"></select></label>
+        <label>Status <select name="status"></select></label>
+        <label>Assignee <select name="assigneeId"></select></label>
+      </div>
+      <p id="formError" class="error" hidden></p>
+      <div class="row end">
+        <button type="button" id="cancelBtn">Cancel</button>
+        <button type="submit" class="primary">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" hidden></div>
+  <script src="app.js"></script>
+</body>
+</html>

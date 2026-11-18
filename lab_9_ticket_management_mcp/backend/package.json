@@ -1,0 +1,14 @@
+{
+  "name": "lab9-ticket-backend",
+  "version": "1.0.0",
+  "description": "Ticket management REST backend (Lab 9) - serves the UI and stores data in a JSON file",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.0"
+  }
+}

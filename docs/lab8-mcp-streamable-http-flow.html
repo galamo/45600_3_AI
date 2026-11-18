@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lab 8 — Cursor ↔ Quiz MCP (Streamable HTTP)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  --ground:#0f1720;
+  --panel:#16212d;
+  --line:#2a3a4b;
+  --ink:#e6edf3;
+  --muted:#8297ab;
+  --dim:#4d6276;
+  --req:#5cc8ff;
+  --res:#ffb547;
+  --ok:#3ddc97;
+  --tool:#b18cff;
+  --sse:#5eead4;
+  --display:"Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
+  --mono:"IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  color-scheme:dark;
+}
+html,body{background:var(--ground);color:var(--ink)}
+body{
+  font-family:var(--mono);
+  margin:0;
+  padding:28px max(16px,env(safe-area-inset-right)) 48px max(16px,env(safe-area-inset-left));
+  background-image:
+    radial-gradient(ellipse 70% 45% at 8% -8%, rgba(92,200,255,.07), transparent 55%),
+    radial-gradient(ellipse 50% 35% at 92% 0%, rgba(177,140,255,.05), transparent 50%);
+}
+.wrap{max-width:1120px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+header{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:8px 24px}
+h1{font-family:var(--display);font-weight:700;font-size:clamp(1.5rem,3.2vw,2.15rem);margin:0;letter-spacing:-.01em;text-wrap:balance}
+h1 em{font-style:normal;color:var(--req)}
+.meta{color:var(--muted);font-size:.78rem;letter-spacing:.07em;text-transform:uppercase}
+.lede{margin:-4px 0 0;color:var(--muted);font-size:.92rem;line-height:1.55;max-width:78ch}
+.lede code{color:var(--req)}
+
+.stage{
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:16px;
+  overflow:hidden;
+  position:relative;
+}
+.stage svg{display:block;width:100%;height:auto}
+svg text{font-family:var(--mono)}
+
+.caption{display:grid;grid-template-columns:auto 1fr;gap:14px;align-items:center;min-height:3.6em}
+.caption .n{font-family:var(--display);font-size:2rem;font-weight:700;color:var(--muted);font-variant-numeric:tabular-nums;width:2.2ch}
+.caption p{margin:0;font-size:.95rem;line-height:1.5}
+.caption code{color:var(--req)}
+.caption code.r{color:var(--res)}
+.caption code.t{color:var(--tool)}
+.caption code.o{color:var(--ok)}
+.caption code.s{color:var(--sse)}
+
+.rail{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+.rail div{height:4px;border-radius:2px;background:var(--line);transition:background .35s}
+.rail div.on{background:var(--req)}
+.rail div.on.done{background:var(--ok)}
+
+.controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+button{
+  font:500 .85rem var(--mono);
+  color:var(--ink);
+  background:transparent;
+  border:1px solid var(--line);
+  border-radius:8px;
+  padding:9px 16px;
+  cursor:pointer;
+  letter-spacing:.03em;
+}
+button:hover{border-color:var(--muted)}
+button:focus-visible{outline:2px solid var(--req);outline-offset:2px}
+button.primary{background:var(--ink);color:var(--ground);border-color:var(--ink)}
+.speed{margin-left:auto;display:flex;gap:4px;align-items:center;color:var(--muted);font-size:.8rem}
+.speed button{padding:6px 10px}
+.speed button[aria-pressed="true"]{border-color:var(--req);color:var(--req)}
+.sound{display:flex;gap:4px;align-items:center;color:var(--muted);font-size:.8rem}
+.sound button[aria-pressed="true"]{border-color:var(--ok);color:var(--ok)}
+@media (max-width:560px){.speed,.sound{margin-left:0}}
+
+.anatomy{border-top:1px solid var(--line);padding-top:22px;display:flex;flex-direction:column;gap:16px}
+.anatomy h2{margin:0;font-family:var(--display);font-weight:500;font-size:1.15rem}
+.flow{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.flow svg{display:block;width:100%;height:auto}
+.pipe-flow{stroke-dasharray:5 7;animation:flow 1.4s linear infinite}
+@keyframes flow{to{stroke-dashoffset:-24}}
+@media (prefers-reduced-motion:reduce){.pipe-flow{animation:none}}
+.notes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;font-size:.82rem;line-height:1.55;color:var(--muted)}
+.notes strong{display:block;color:var(--ink);font-weight:500;margin-bottom:4px}
+.notes code{color:var(--req)}
+@media (max-width:760px){.notes{grid-template-columns:1fr}}
+
+.verbs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.verb{
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:12px;
+  padding:14px 16px;
+  font-size:.82rem;
+  line-height:1.5;
+  color:var(--muted);
+}
+.verb strong{display:block;font-family:var(--display);font-size:1rem;font-weight:600;margin-bottom:6px}
+.verb.post strong{color:var(--req)}
+.verb.get strong{color:var(--sse)}
+.verb.delete strong{color:var(--res)}
+.verb code{color:var(--ink)}
+@media (max-width:760px){.verbs{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Lab 8 — <em>Cursor</em> ↔ Quiz MCP</h1>
+    <span class="meta">one host · one server · streamable http</span>
+  </header>
+  <p class="lede">Two sides only. <strong style="color:var(--ink);font-weight:500">Cursor</strong> is the host. <strong style="color:var(--ink);font-weight:500">Quiz MCP</strong> is one Express process that owns the Streamable HTTP endpoint, the session Map, and the quiz tools. Communication rides <code>localhost:3200/mcp</code> — <code>POST</code> for JSON-RPC / tool calls, <code>GET</code> for SSE push.</p>
+
+  <div class="stage">
+  <svg viewBox="0 0 1080 500" role="img" aria-label="Cursor host talking to a unified Quiz MCP server over Streamable HTTP">
+    <defs>
+      <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+        <feGaussianBlur stdDeviation="7" result="b"/>
+        <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+      <pattern id="grid" width="28" height="28" patternUnits="userSpaceOnUse">
+        <path d="M28 0H0V28" fill="none" stroke="#1a2735" stroke-width="1"/>
+      </pattern>
+      <marker id="arrowReq" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0 0 L10 5 L0 10 z" fill="#5cc8ff"/>
+      </marker>
+      <marker id="arrowOk" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0 0 L10 5 L0 10 z" fill="#3ddc97"/>
+      </marker>
+      <marker id="arrowSse" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0 0 L10 5 L0 10 z" fill="#5eead4"/>
+      </marker>
+    </defs>
+    <rect width="1080" height="500" fill="url(#grid)"/>
+
+    <!-- PIPE / WIRE between Cursor and MCP -->
+    <g id="wire">
+      <path id="wirePost" d="M330 160 H460" fill="none" stroke="#2a3a4b" stroke-width="2.5" stroke-dasharray="6 8" marker-end="url(#arrowReq)" opacity=".45"/>
+      <path id="wireSse" d="M460 230 H330" fill="none" stroke="#2a3a4b" stroke-width="2.5" stroke-dasharray="6 8" marker-end="url(#arrowSse)" opacity=".45"/>
+      <path id="wireRes" d="M460 300 H330" fill="none" stroke="#2a3a4b" stroke-width="2.5" stroke-dasharray="6 8" marker-end="url(#arrowOk)" opacity=".45"/>
+
+      <text id="wirePostLbl" x="395" y="148" fill="#4d6276" font-size="11" text-anchor="middle">POST · JSON-RPC</text>
+      <text id="wireSseLbl" x="395" y="218" fill="#4d6276" font-size="11" text-anchor="middle">GET · SSE</text>
+      <text id="wireResLbl" x="395" y="288" fill="#4d6276" font-size="11" text-anchor="middle">tool result</text>
+
+      <rect id="urlBadge" x="340" y="420" width="110" height="28" rx="14" fill="#121c28" stroke="#2a3a4b"/>
+      <text id="urlText" x="395" y="438" fill="#4d6276" font-size="10" text-anchor="middle">:3200/mcp</text>
+    </g>
+
+    <!-- LEFT: CURSOR -->
+    <g id="client" transform="translate(0 0)">
+      <rect id="clientFrame" x="36" y="40" width="294" height="400" rx="18" fill="#0f1720" stroke="#2a3a4b" stroke-width="2"/>
+      <path d="M36 56a18 18 0 0 1 18-16h258a18 18 0 0 1 18 16v22H36z" fill="#1d2a38"/>
+      <circle cx="58" cy="52" r="4" fill="#ff6b6b"/><circle cx="72" cy="52" r="4" fill="#ffb547"/><circle cx="86" cy="52" r="4" fill="#3ddc97"/>
+      <text x="108" y="56" fill="#8297ab" font-size="12">CURSOR · MCP host</text>
+
+      <rect x="56" y="100" width="254" height="64" rx="12" fill="#16212d" stroke="#2a3a4b"/>
+      <text x="72" y="124" fill="#8297ab" font-size="10">YOU</text>
+      <text id="userBubble" x="72" y="146" fill="#e6edf3" font-size="14">quiz me on MCP</text>
+
+      <rect id="agentCard" x="56" y="184" width="254" height="88" rx="12" fill="#121c28" stroke="#2a3a4b" opacity=".55"/>
+      <text x="72" y="210" fill="#4d6276" font-size="10">AGENT</text>
+      <text id="agentLine1" x="72" y="234" fill="#4d6276" font-size="13">idle</text>
+      <text id="agentLine2" x="72" y="254" fill="#4d6276" font-size="11"></text>
+
+      <rect id="cfgCard" x="56" y="292" width="254" height="72" rx="12" fill="#121c28" stroke="#2a3a4b"/>
+      <text x="72" y="316" fill="#8297ab" font-size="10">.cursor/mcp.json</text>
+      <text x="72" y="338" fill="#e6edf3" font-size="12">transport: "http"</text>
+      <text x="72" y="356" fill="#4d6276" font-size="11">url → localhost:3200/mcp</text>
+
+      <text x="183" y="410" fill="#8297ab" font-size="13" text-anchor="middle" letter-spacing="2">HOST</text>
+      <text x="183" y="428" fill="#4d6276" font-size="10" text-anchor="middle">discovers · calls tools · shows Q</text>
+    </g>
+
+    <!-- RIGHT: UNIFIED QUIZ MCP -->
+    <g id="mcp" transform="translate(0 0)">
+      <rect id="mcpFrame" x="500" y="40" width="544" height="400" rx="18" fill="#0f1720" stroke="#2a3a4b" stroke-width="2"/>
+      <path d="M500 56a18 18 0 0 1 18-16h508a18 18 0 0 1 18 16v22H500z" fill="#1d2a38"/>
+      <circle class="mcpLed" cx="522" cy="52" r="4" fill="#2a3a4b"/><circle class="mcpLed" cx="536" cy="52" r="4" fill="#2a3a4b"/>
+      <text x="556" y="56" fill="#8297ab" font-size="12">QUIZ MCP SERVER · one process</text>
+      <text x="1000" y="56" fill="#4d6276" font-size="10" text-anchor="end">index.js + create-quiz-server.js</text>
+
+      <!-- Layer A: HTTP surface -->
+      <rect id="httpLayer" x="520" y="96" width="504" height="78" rx="14" fill="#121c28" stroke="#2a3a4b"/>
+      <text x="538" y="120" fill="#8297ab" font-size="10">STREAMABLE HTTP · Express /mcp</text>
+      <g id="verbPost">
+        <rect class="vBox" x="538" y="132" width="140" height="28" rx="8" fill="#16212d" stroke="#2a3a4b"/>
+        <text x="608" y="150" fill="#8297ab" font-size="12" text-anchor="middle">POST</text>
+      </g>
+      <g id="verbGet">
+        <rect class="vBox" x="692" y="132" width="140" height="28" rx="8" fill="#16212d" stroke="#2a3a4b"/>
+        <text x="762" y="150" fill="#8297ab" font-size="12" text-anchor="middle">GET · SSE</text>
+      </g>
+      <g id="verbDel">
+        <rect class="vBox" x="846" y="132" width="158" height="28" rx="8" fill="#16212d" stroke="#2a3a4b"/>
+        <text x="925" y="150" fill="#8297ab" font-size="12" text-anchor="middle">DELETE</text>
+      </g>
+
+      <!-- Layer B: Session -->
+      <rect id="sessionLayer" x="520" y="190" width="504" height="72" rx="14" fill="#121c28" stroke="#2a3a4b" opacity=".55"/>
+      <text x="538" y="214" fill="#4d6276" font-size="10">SESSION · transports Map</text>
+      <text id="sessionText" x="538" y="240" fill="#4d6276" font-size="13">no session yet</text>
+      <text id="sessionSub" x="780" y="240" fill="#4d6276" font-size="11">StreamableHTTPServerTransport</text>
+
+      <!-- Layer C: Tools -->
+      <rect id="toolsLayer" x="520" y="278" width="504" height="124" rx="14" fill="#121c28" stroke="#2a3a4b" opacity=".55"/>
+      <text x="538" y="302" fill="#4d6276" font-size="10">TOOLS · createQuizMcpServer()</text>
+
+      <g id="tool0">
+        <rect class="tBox" x="538" y="316" width="150" height="60" rx="10" fill="#16212d" stroke="#2a3a4b"/>
+        <circle class="tDot" cx="558" cy="336" r="5" fill="#2a3a4b"/>
+        <text x="572" y="340" fill="#e6edf3" font-size="12" font-weight="600">list_topics</text>
+        <text x="548" y="360" fill="#4d6276" font-size="10">topics · counts</text>
+      </g>
+      <g id="tool1">
+        <rect class="tBox" x="702" y="316" width="150" height="60" rx="10" fill="#16212d" stroke="#2a3a4b"/>
+        <circle class="tDot" cx="722" cy="336" r="5" fill="#2a3a4b"/>
+        <text x="736" y="340" fill="#e6edf3" font-size="12" font-weight="600">get_question</text>
+        <text x="712" y="360" fill="#4d6276" font-size="10">topicId · next Q</text>
+      </g>
+      <g id="tool2">
+        <rect class="tBox" x="866" y="316" width="140" height="60" rx="10" fill="#16212d" stroke="#2a3a4b"/>
+        <circle class="tDot" cx="886" cy="336" r="5" fill="#2a3a4b"/>
+        <text x="900" y="340" fill="#e6edf3" font-size="12" font-weight="600">check_answer</text>
+        <text x="876" y="360" fill="#4d6276" font-size="10">validate</text>
+      </g>
+
+      <text x="772" y="428" fill="#8297ab" font-size="13" text-anchor="middle" letter-spacing="2">MCP</text>
+    </g>
+
+    <g id="packet" opacity="0">
+      <rect id="pill" x="-90" y="-42" width="180" height="26" rx="13" fill="#16212d" stroke="#5cc8ff" stroke-width="1.6"/>
+      <text id="pillText" x="0" y="-24" fill="#5cc8ff" font-size="11" font-weight="500" text-anchor="middle"></text>
+      <circle id="dot" r="8" fill="#5cc8ff" filter="url(#glow)"/>
+    </g>
+
+    <g id="toast" opacity="0" transform="translate(540 52)">
+      <g id="toastInner">
+        <rect id="toastBg" x="-130" y="-22" width="260" height="44" rx="22" fill="#3ddc97" filter="url(#glow)"/>
+        <circle cx="-104" cy="0" r="12" fill="#0f1720"/>
+        <path d="M-109 0l4 4 8-9" fill="none" stroke="#3ddc97" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+        <text id="toastText" x="10" y="5" fill="#0f1720" font-size="14" font-weight="600" text-anchor="middle">Quiz ready</text>
+      </g>
+    </g>
+  </svg>
+  </div>
+
+  <div class="caption" aria-live="polite">
+    <span class="n" id="stepN">0</span>
+    <p id="stepText">Two boxes: Cursor (host) and Quiz MCP (server). Communication starts next…</p>
+  </div>
+  <div class="rail" id="rail"><div></div><div></div><div></div><div></div><div></div><div></div><div></div></div>
+
+  <div class="controls">
+    <button class="primary" id="play" type="button">Pause</button>
+    <button id="replay" type="button">Replay</button>
+    <div class="sound" role="group" aria-label="Sound">
+      Sound
+      <button type="button" id="soundBtn" aria-pressed="true">On</button>
+    </div>
+    <div class="speed" role="group" aria-label="Speed">Speed
+      <button type="button" data-s="0.5" aria-pressed="false">0.5×</button>
+      <button type="button" data-s="1" aria-pressed="true">1×</button>
+      <button type="button" data-s="1.5" aria-pressed="false">1.5×</button>
+    </div>
+  </div>
+
+  <section class="anatomy" aria-label="HTTP verbs for Streamable HTTP MCP">
+    <h2>Same server, three verbs on /mcp</h2>
+    <div class="verbs">
+      <div class="verb post">
+        <strong>POST /mcp</strong>
+        Cursor → MCP. Initialize session, then JSON-RPC: <code>tools/list</code>, <code>tools/call</code> for <code>list_topics</code> / <code>get_question</code> / <code>check_answer</code>.
+      </div>
+      <div class="verb get">
+        <strong>GET /mcp</strong>
+        MCP → Cursor. SSE stream for the same <code>mcp-session-id</code> — server can push while tools run.
+      </div>
+      <div class="verb delete">
+        <strong>DELETE /mcp</strong>
+        End the session. Transport closes; entry removed from the Map inside the same process.
+      </div>
+    </div>
+  </section>
+
+  <section class="anatomy" aria-label="Static overview Cursor to MCP">
+    <h2>The same hop, at a glance</h2>
+    <div class="flow">
+      <svg viewBox="0 0 1080 160" role="img" aria-label="Cursor calls tools on Quiz MCP over Streamable HTTP">
+        <rect width="1080" height="160" fill="#16212d"/>
+        <g>
+          <rect x="60" y="30" width="220" height="80" rx="14" fill="#0f1720" stroke="#5cc8ff" stroke-width="1.5"/>
+          <text x="170" y="64" fill="#5cc8ff" font-size="16" text-anchor="middle" font-weight="600">Cursor</text>
+          <text x="170" y="88" fill="#8297ab" font-size="11" text-anchor="middle">host · agent · mcp.json</text>
+        </g>
+        <g>
+          <rect x="420" y="18" width="600" height="104" rx="14" fill="#0f1720" stroke="#b18cff" stroke-width="1.5"/>
+          <text x="720" y="44" fill="#b18cff" font-size="15" text-anchor="middle" font-weight="600">Quiz MCP (one process)</text>
+          <rect x="448" y="58" width="160" height="44" rx="10" fill="#121c28" stroke="#ffb547"/>
+          <text x="528" y="85" fill="#ffb547" font-size="12" text-anchor="middle">HTTP /mcp</text>
+          <rect x="630" y="58" width="160" height="44" rx="10" fill="#121c28" stroke="#5eead4"/>
+          <text x="710" y="85" fill="#5eead4" font-size="12" text-anchor="middle">session Map</text>
+          <rect x="812" y="58" width="180" height="44" rx="10" fill="#121c28" stroke="#3ddc97"/>
+          <text x="902" y="85" fill="#3ddc97" font-size="12" text-anchor="middle">quiz tools</text>
+        </g>
+        <path class="pipe-flow" d="M280 70 H420" fill="none" stroke="#5cc8ff" stroke-width="1.8"/>
+        <path d="M412 64 l8 6 l-8 6" fill="none" stroke="#5cc8ff" stroke-width="1.6"/>
+        <text x="350" y="58" fill="#5cc8ff" font-size="11" text-anchor="middle">POST tools/call</text>
+        <path class="pipe-flow" d="M420 100 H280" fill="none" stroke="#3ddc97" stroke-width="1.6" opacity=".85"/>
+        <path d="M288 94 l-8 6 l8 6" fill="none" stroke="#3ddc97" stroke-width="1.6"/>
+        <text x="350" y="122" fill="#3ddc97" font-size="11" text-anchor="middle">result · SSE</text>
+        <text x="170" y="140" fill="#4d6276" font-size="10" text-anchor="middle">asks · shows question</text>
+        <text x="720" y="140" fill="#4d6276" font-size="10" text-anchor="middle">layers inside the same server — not separate services</text>
+      </svg>
+    </div>
+    <div class="notes">
+      <p><strong>One MCP box</strong>HTTP verbs, <code>transports</code> Map, and quiz tools are internals of <code>lab_8_mcp_server</code> — not three peers. Cursor only sees the URL.</p>
+      <p><strong>Tool access is POST</strong>Calling <code class="t">get_question</code> is a <code>tools/call</code> JSON-RPC on <code>POST /mcp</code> with the session header. The handler runs in-process and returns structured content.</p>
+      <p><strong>SSE is the return path</strong><code class="s">GET /mcp</code> keeps a channel open so the same server can push events while Cursor’s agent waits on the quiz loop.</p>
+    </div>
+  </section>
+</div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const REQ = '#5cc8ff', RES = '#ffb547', OK = '#3ddc97', TOOL = '#b18cff', SSE = '#5eead4', LINE = '#2a3a4b';
+
+  const packet = $('packet'), pill = $('pill'), pillText = $('pillText'), dot = $('dot');
+  const toast = $('toast'), toastInner = $('toastInner'), toastText = $('toastText');
+  const stepN = $('stepN'), stepText = $('stepText');
+  const rail = [...$('rail').children];
+  const mcpLeds = [...document.querySelectorAll('.mcpLed')];
+
+  const floaters = [
+    { id: 'client', amp: 2.4, speed: 0.2, phase: 0.2 },
+    { id: 'mcp', amp: 2.0, speed: 0.16, phase: 1.8 },
+  ];
+
+  // Packet travels on the wire between Cursor edge (x≈330) and MCP edge (x≈500)
+  const P = [
+    { k:'idle', d:1.2, step:0, txt:'Two boxes: <strong>Cursor</strong> (host) and <strong>Quiz MCP</strong> (one server). Communication starts next…', tone:'rest' },
+    { k:'type', d:1.8, step:1, txt:'You type <code>“quiz me on MCP”</code>. Cursor’s agent will use tools from the MCP configured in <code>mcp.json</code>.', tone:'soft' },
+    { k:'toMcpInit', d:2.0, step:2, from:[330,160], to:[520,145], label:'POST initialize', c:REQ, wire:'post', txt:'Host → MCP: <code>POST /mcp</code> with initialize JSON-RPC. Still one server — Express receives it.', tone:'whoosh' },
+    { k:'session', d:1.8, step:2, txt:'Inside MCP: create transport, <code>server.connect(transport)</code>, store UUID in <code class="s">transports</code>. Reply header: <code>mcp-session-id</code>.', tone:'blip' },
+    { k:'sseOpen', d:2.0, step:3, from:[520,230], to:[330,230], label:'GET · SSE open', c:SSE, wire:'sse', txt:'Host opens <code class="s">GET /mcp</code> with that session id. Same process keeps an SSE channel for push.', tone:'whoosh' },
+    { k:'listTools', d:2.0, step:4, from:[330,160], to:[560,340], label:'tools/list', c:TOOL, wire:'post', txt:'Host → MCP: <code>POST</code> <code class="t">tools/list</code>. Server returns <code>list_topics</code>, <code>get_question</code>, <code>check_answer</code>…', tone:'whoosh' },
+    { k:'callList', d:2.1, step:5, from:[330,160], to:[610,340], label:'tools/call list_topics', c:TOOL, wire:'post', txt:'Agent calls <code class="t">list_topics</code>. Packet lands on the tool inside the MCP box — still the same server.', tone:'chime' },
+    { k:'callGet', d:2.1, step:5, from:[330,160], to:[770,340], label:'tools/call get_question', c:TOOL, wire:'post', txt:'Next call: <code class="t">get_question({ topicId: "mcp" })</code> — again <code>POST /mcp</code> + session header.', tone:'whoosh' },
+    { k:'resultBack', d:2.0, step:6, from:[520,300], to:[330,300], label:'question JSON', c:OK, wire:'res', txt:'MCP → Host: structured tool result (question text / id). May also stream on the open SSE line.', tone:'whoosh' },
+    { k:'askUser', d:1.8, step:6, txt:'Cursor shows the question to you. Your answer → agent calls <code class="o">check_answer</code> on the same session.', tone:'soft' },
+    { k:'check', d:2.0, step:7, from:[330,160], to:[930,340], label:'tools/call check_answer', c:OK, wire:'post', txt:'<code class="o">check_answer</code> runs in-process; feedback returns on the wire. Loop until the topic is done.', tone:'whoosh' },
+    { k:'done', d:2.8, step:7, txt:'Pattern: <strong>Cursor ↔ Quiz MCP</strong>. HTTP + session Map + tools = layers of one component — not three services.', tone:'resolve' },
+  ];
+
+  const at = k => P.findIndex(p => p.k === k);
+  const total = P.reduce((a, p) => a + p.d, 0);
+  let t = 0, speed = 1, playing = true, last = null, soundOn = true;
+  let lastToneKey = null;
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  const ease = x => x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+  const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+  const back = x => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); };
+  const lerp = (a, b, u) => a + (b - a) * u;
+
+  let audioCtx = null;
+  function ensureAudio(){
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    return audioCtx;
+  }
+
+  function tone(kind){
+    if (!soundOn || reduce) return;
+    try {
+      const ctx = ensureAudio();
+      const now = ctx.currentTime;
+      const master = ctx.createGain();
+      master.gain.value = 0.07;
+      master.connect(ctx.destination);
+
+      const beep = (freq, start, dur, type = 'sine', gain = 1) => {
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.type = type;
+        o.frequency.setValueAtTime(freq, now + start);
+        g.gain.setValueAtTime(0, now + start);
+        g.gain.linearRampToValueAtTime(0.9 * gain, now + start + 0.03);
+        g.gain.exponentialRampToValueAtTime(0.001, now + start + dur);
+        o.connect(g); g.connect(master);
+        o.start(now + start); o.stop(now + start + dur + 0.02);
+      };
+
+      if (kind === 'whoosh'){
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        const f = ctx.createBiquadFilter();
+        o.type = 'triangle';
+        o.frequency.setValueAtTime(220, now);
+        o.frequency.exponentialRampToValueAtTime(640, now + 0.42);
+        f.type = 'lowpass';
+        f.frequency.setValueAtTime(900, now);
+        f.frequency.exponentialRampToValueAtTime(1800, now + 0.4);
+        g.gain.setValueAtTime(0.0001, now);
+        g.gain.exponentialRampToValueAtTime(0.55, now + 0.08);
+        g.gain.exponentialRampToValueAtTime(0.001, now + 0.55);
+        o.connect(f); f.connect(g); g.connect(master);
+        o.start(now); o.stop(now + 0.58);
+      } else if (kind === 'blip'){
+        beep(520, 0, 0.18, 'sine', 0.7);
+        beep(780, 0.08, 0.16, 'sine', 0.45);
+      } else if (kind === 'chime'){
+        beep(523.25, 0, 0.35, 'sine', 0.55);
+        beep(659.25, 0.12, 0.4, 'sine', 0.45);
+        beep(783.99, 0.24, 0.5, 'triangle', 0.35);
+      } else if (kind === 'soft'){
+        beep(392, 0, 0.4, 'sine', 0.4);
+      } else if (kind === 'resolve'){
+        beep(392, 0, 0.35, 'sine', 0.45);
+        beep(523.25, 0.15, 0.4, 'sine', 0.5);
+        beep(659.25, 0.32, 0.55, 'triangle', 0.4);
+      } else if (kind === 'rest'){
+        beep(246.94, 0, 0.5, 'sine', 0.25);
+      }
+    } catch (_) { /* autoplay / unsupported */ }
+  }
+
+  function setStroke(el, color){ el.setAttribute('stroke', color); }
+
+  function lightTool(i, on, color){
+    const g = $('tool' + i);
+    if (!g) return;
+    const box = g.querySelector('.tBox');
+    const dotEl = g.querySelector('.tDot');
+    if (box) setStroke(box, on ? color : LINE);
+    if (dotEl) dotEl.setAttribute('fill', on ? color : LINE);
+  }
+
+  function setVerb(id, on, color){
+    const g = $(id);
+    if (!g) return;
+    const box = g.querySelector('.vBox');
+    const label = g.querySelector('text');
+    if (box) setStroke(box, on ? color : LINE);
+    if (label) label.setAttribute('fill', on ? color : '#8297ab');
+  }
+
+  function setWire(which, on, color){
+    const path = which === 'post' ? $('wirePost') : which === 'sse' ? $('wireSse') : $('wireRes');
+    const lbl = which === 'post' ? $('wirePostLbl') : which === 'sse' ? $('wireSseLbl') : $('wireResLbl');
+    path.setAttribute('stroke', on ? color : LINE);
+    path.setAttribute('opacity', on ? 1 : 0.45);
+    lbl.setAttribute('fill', on ? color : '#4d6276');
+  }
+
+  function render(){
+    let acc = 0, ph = P[0], idx = 0, local = 0;
+    for (let i = 0; i < P.length; i++){
+      if (t < acc + P[i].d || i === P.length - 1){
+        ph = P[i]; idx = i; local = clamp((t - acc) / ph.d); break;
+      }
+      acc += P[i].d;
+    }
+    const lt = local * ph.d;
+    const reached = k => idx > at(k) || ph.k === k;
+
+    let tp = ph;
+    for (let i = idx; i >= 0 && !tp.txt; i--) tp = P[i];
+    stepN.textContent = ph.step;
+    if (stepText.innerHTML !== tp.txt) stepText.innerHTML = tp.txt;
+    rail.forEach((r, i) => {
+      r.className = i < ph.step ? 'on' + (ph.k === 'done' ? ' done' : '') : '';
+    });
+
+    const toneKey = ph.k + ':' + Math.floor(acc);
+    if (ph.tone && toneKey !== lastToneKey && local < 0.08){
+      lastToneKey = ph.k + ':' + idx;
+      tone(ph.tone);
+    }
+
+    const drift = reduce ? 0 : 1;
+    floaters.forEach(f => {
+      const y = Math.sin(t * f.speed + f.phase) * f.amp * drift;
+      const x = Math.cos(t * f.speed * 0.7 + f.phase) * (f.amp * 0.35) * drift;
+      $(f.id).setAttribute('transform', `translate(${x.toFixed(2)} ${y.toFixed(2)})`);
+    });
+
+    // Cursor chat
+    const typed = idx > at('type') ? 1 : (ph.k === 'type' ? local : 0);
+    const msg = 'quiz me on MCP';
+    $('userBubble').textContent = msg.slice(0, Math.max(1, Math.round(typed * msg.length)));
+
+    const clientHot = ['type','toMcpInit','askUser','done'].includes(ph.k) || ph.wire === 'post';
+    setStroke($('clientFrame'), ph.k === 'done' ? OK : (clientHot || reached('toMcpInit') ? REQ : LINE));
+
+    const agentActive = reached('listTools');
+    $('agentCard').setAttribute('opacity', agentActive ? 1 : 0.55);
+    setStroke($('agentCard'), agentActive ? REQ : LINE);
+    const agentLabels = {
+      listTools: ['listing tools…', 'tools/list'],
+      callList: ['calling list_topics', 'POST tools/call'],
+      callGet: ['calling get_question', 'topicId: mcp'],
+      resultBack: ['got question', 'showing to you'],
+      askUser: ['waiting for answer', 'then check_answer'],
+      check: ['calling check_answer', 'validate feedback'],
+      done: ['quiz loop live', 'Cursor ↔ MCP'],
+    };
+    const al = agentLabels[ph.k] || (reached('askUser')
+      ? ['quiz in progress', 'Q ready']
+      : (reached('listTools') ? ['using MCP tools', ''] : ['idle', '']));
+    $('agentLine1').textContent = al[0];
+    $('agentLine1').setAttribute('fill', agentActive ? '#e6edf3' : '#4d6276');
+    $('agentLine2').textContent = al[1] || '';
+    $('agentLine2').setAttribute('fill', agentActive ? OK : '#4d6276');
+
+    // MCP frame
+    const mcpBusy = reached('toMcpInit');
+    mcpLeds.forEach((l, i) => l.setAttribute('fill', mcpBusy && Math.floor(t * 8 + i) % 3 === 0 ? TOOL : LINE));
+    setStroke($('mcpFrame'), ph.k === 'done' ? OK : (mcpBusy ? TOOL : LINE));
+
+    // Layers inside MCP
+    setStroke($('httpLayer'), reached('toMcpInit') ? RES : LINE);
+    setVerb('verbPost', ['toMcpInit','listTools','callList','callGet','check'].includes(ph.k) || (ph.wire === 'post'), REQ);
+    setVerb('verbGet', ['sseOpen','resultBack'].includes(ph.k) || reached('sseOpen'), SSE);
+    setVerb('verbDel', ph.k === 'done', RES);
+
+    $('sessionLayer').setAttribute('opacity', reached('session') ? 1 : 0.55);
+    setStroke($('sessionLayer'), reached('session') ? SSE : LINE);
+    $('sessionText').textContent = reached('session') ? 'mcp-session-id · a1b2…' : 'no session yet';
+    $('sessionText').setAttribute('fill', reached('session') ? SSE : '#4d6276');
+    $('sessionSub').setAttribute('fill', reached('session') ? '#8297ab' : '#4d6276');
+
+    $('toolsLayer').setAttribute('opacity', reached('listTools') ? 1 : 0.55);
+    setStroke($('toolsLayer'), reached('listTools') ? TOOL : LINE);
+
+    lightTool(0, ph.k === 'callList' || (reached('callList') && ph.k !== 'callGet' && ph.k !== 'check'), TOOL);
+    lightTool(1, ph.k === 'callGet' || reached('resultBack'), TOOL);
+    lightTool(2, ph.k === 'check' || (reached('check') && ph.k === 'done'), OK);
+    if (reached('listTools') && !reached('callList')) {
+      lightTool(0, true, TOOL);
+      lightTool(1, true, TOOL);
+      lightTool(2, true, TOOL);
+    }
+
+    // Wire highlights
+    setWire('post', ph.wire === 'post' || ['toMcpInit','listTools','callList','callGet','check'].includes(ph.k), REQ);
+    setWire('sse', ph.wire === 'sse' || reached('sseOpen'), SSE);
+    setWire('res', ph.wire === 'res' || reached('resultBack'), OK);
+
+    $('urlBadge').setAttribute('stroke', mcpBusy ? REQ : LINE);
+    $('urlText').setAttribute('fill', mcpBusy ? REQ : '#4d6276');
+    $('urlText').textContent = mcpBusy ? 'session live' : ':3200/mcp';
+
+    // Flying packet — can arc into a tool inside MCP
+    if (ph.from){
+      const e = ease(local);
+      const x = lerp(ph.from[0], ph.to[0], e);
+      const y = lerp(ph.from[1], ph.to[1], e);
+      packet.setAttribute('opacity', Math.min(1, local * 5, (1 - local) * 5 + 0.25));
+      packet.setAttribute('transform', `translate(${x} ${y})`);
+      const w = Math.min(280, ph.label.length * 7.2 + 32);
+      pill.setAttribute('x', -w / 2);
+      pill.setAttribute('width', w);
+      pill.setAttribute('stroke', ph.c);
+      pillText.textContent = ph.label;
+      pillText.setAttribute('fill', ph.c);
+      dot.setAttribute('fill', ph.c);
+    } else {
+      packet.setAttribute('opacity', 0);
+    }
+
+    if (ph.k === 'done'){
+      const s = clamp(lt / 0.5), out = clamp((lt - (ph.d - 0.6)) / 0.45);
+      const label = 'Cursor ↔ MCP · tools live';
+      toastText.textContent = label;
+      const w = label.length * 8.2 + 70;
+      $('toastBg').setAttribute('x', -w / 2);
+      $('toastBg').setAttribute('width', w);
+      toastInner.querySelector('circle').setAttribute('cx', -w / 2 + 26);
+      toastInner.querySelector('path').setAttribute('d', `M${-w / 2 + 21} 0l4 4 8-9`);
+      toastText.setAttribute('x', 14);
+      toast.setAttribute('opacity', s * (1 - out));
+      toastInner.setAttribute('transform', `translate(0 ${(1 - s) * 16 - out * 10}) scale(${Math.max(back(s) * (1 - out * 0.15), 0.01)})`);
+      setStroke($('clientFrame'), OK);
+      setStroke($('mcpFrame'), OK);
+    } else {
+      toast.setAttribute('opacity', 0);
+    }
+  }
+
+  function frame(ts){
+    if (last == null) last = ts;
+    const dt = Math.min(0.1, (ts - last) / 1000);
+    last = ts;
+    if (playing){
+      t += dt * speed;
+      if (t >= total){ t = 0; lastToneKey = null; }
+    }
+    render();
+    requestAnimationFrame(frame);
+  }
+
+  const playBtn = $('play');
+  const sync = () => { playBtn.textContent = playing ? 'Pause' : 'Play'; };
+  playBtn.addEventListener('click', () => {
+    playing = !playing;
+    if (playing && soundOn) ensureAudio();
+    sync();
+  });
+  $('replay').addEventListener('click', () => {
+    t = 0; lastToneKey = null; playing = true;
+    if (soundOn) ensureAudio();
+    sync();
+  });
+  document.querySelectorAll('.speed button').forEach(b => b.addEventListener('click', () => {
+    speed = +b.dataset.s;
+    document.querySelectorAll('.speed button').forEach(x => x.setAttribute('aria-pressed', x === b));
+  }));
+
+  const soundBtn = $('soundBtn');
+  soundBtn.addEventListener('click', () => {
+    soundOn = !soundOn;
+    soundBtn.textContent = soundOn ? 'On' : 'Off';
+    soundBtn.setAttribute('aria-pressed', soundOn);
+    if (soundOn){ ensureAudio(); tone('soft'); }
+  });
+
+  const unlock = () => { if (soundOn) ensureAudio(); window.removeEventListener('pointerdown', unlock); };
+  window.addEventListener('pointerdown', unlock);
+
+  const jump = new URLSearchParams(location.search).get('at');
+  if (jump && at(jump) >= 0){
+    const i = at(jump);
+    t = P.slice(0, i).reduce((a, p) => a + p.d, 0) + P[i].d * 0.55;
+    playing = false;
+  } else if (reduce){
+    t = total - 1.4;
+    playing = false;
+  }
+  sync();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
