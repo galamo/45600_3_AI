@@ -72,7 +72,7 @@ export async function answerPricingQuestion({
 
   const docs = await getRelevantPricing(ownRetriever, question, k);
   const pricingContext = docs.map((d) => d.pageContent).join("\n\n---\n\n");
-  console.log("==================____PRICING CONTEXT_____", pricingContext);
+  console.log("==================____PRICING CONTEXT_____========\n", pricingContext);
   // chat model = GPT
   // model embedding = openAI * 2 ( build * 2 ) , RAG pipline, retriever,
   const model = createChatModel();
@@ -81,7 +81,7 @@ export async function answerPricingQuestion({
       content:
         SYSTEM_PROMPT +
         "\n\nPricing reference (excerpts):\n\n" +
-        pricingContext,
+        pricingContext, 
     }),
     new HumanMessage({ content: question }),
   ];

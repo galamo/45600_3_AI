@@ -101,9 +101,9 @@ export async function buildPricingRAG(pricingFilePath = DEFAULT_PRICING_PATH, em
     },
     { basePath: "https://openrouter.ai/api/v1" }
   );
-
+  // console.log("embeddings", embeddings);
   const vectorStore = await MemoryVectorStore.fromDocuments(splitDocs, embeddings);
-  const retriever = vectorStore.asRetriever({ k: 1 });
+  const retriever = vectorStore.asRetriever({ k: 3 });
 
   return { vectorStore, retriever };
 }
