@@ -7,7 +7,6 @@ import { ChatOpenRouter } from "@langchain/openrouter";
 import { MultiServerMCPClient } from "@langchain/mcp-adapters";
 
 const MCP_URL = process.env.MCP_URL || "http://localhost:3300/mcp";
-const MCP_AUTH_TOKEN = process.env.MCP_AUTH_TOKEN;
 
 const SYSTEM_PROMPT = `You are a helpful assistant for a ticket management system.
 Answer questions about tickets, users, projects and sprints by calling the available tools.
@@ -23,11 +22,16 @@ function resolveModelId(ref = "openrouter:gpt-5.4") {
   return id.includes("/") ? id : `openai/${id}`;
 }
 
-let state = null; // { client, agent, tools }
+let state = null; // { client, agent, tools, token }
 
-/** Connects to the MCP server, loads its tools and builds the agent. */
-export async function initAgent() {
-  if (state) return state;
+/**
+ * Connects to the MCP server with the given JWT, loads its tools and builds the agent.
+ * Reuses the existing agent when the token is unchanged.
+ */
+export async function initAgent(token) {
+  if (!token) throw new Error("Not authenticated. Log in to get a JWT.");
+  if (state?.token === token) return state;
+  if (state) await resetAgent();
 
   const client = new MultiServerMCPClient({
     throwOnLoadError: true,
@@ -35,7 +39,7 @@ export async function initAgent() {
       tickets: {
         transport: "http",
         url: MCP_URL,
-        headers: { Authorization: `Bearer ${MCP_AUTH_TOKEN}` },
+        headers: { Authorization: `Bearer ${token}` },
       },
     },
   });
@@ -50,7 +54,7 @@ export async function initAgent() {
 
   const agent = createAgent({ model, tools, systemPrompt: SYSTEM_PROMPT });
 
-  state = { client, agent, tools };
+  state = { client, agent, tools, token };
   console.log(`[agent] connected to ${MCP_URL}, loaded tools: ${tools.map((t) => t.name).join(", ")}`);
   return state;
 }
@@ -66,11 +70,12 @@ export function getToolInfo() {
 }
 
 /**
- * Runs the agent on a chat history.
+ * Runs the agent on a chat history using the caller's JWT for MCP.
  * @param {{role: "user"|"assistant", content: string}[]} messages
+ * @param {string} token MCP Bearer JWT
  */
-export async function chat(messages) {
-  const { agent } = await initAgent();
+export async function chat(messages, token) {
+  const { agent } = await initAgent(token);
   const result = await agent.invoke({ messages });
 
   const out = result.messages;

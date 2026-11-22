@@ -2,16 +2,16 @@
 
 ```
 Browser chat UI ──REST──▶ Express :5000 ──▶ LangChain createAgent (OpenRouter model)
-                                                  │ tools loaded at runtime
-                                                  ▼
-                                   MCP server :3300/mcp ──▶ backend :4000
+     │ login                         │ Bearer JWT on tools/chat
+     ▼                               ▼
+MCP POST /auth :3300 ──JWT──▶ MCP server :3300/mcp ──▶ backend :4000
 ```
 
-- `agent.js`: `MultiServerMCPClient` connects to the ticket MCP server and calls `getTools()`,
+- `agent.js`: `MultiServerMCPClient` connects to the ticket MCP server with the user's JWT and calls `getTools()`,
   so whatever tools the server exposes are discovered when the agent starts. No tool is hardcoded.
   The model is `ChatOpenRouter`, and the agent is built with `createAgent`.
-- `server.js`: Express API and static UI
-- `public/`: chatbot UI (shows the loaded tools, and which tools each answer used)
+- `server.js`: Express API, login proxy to MCP `/auth`, and static UI
+- `public/`: chatbot UI (login gate, loaded tools, tools used per answer)
 
 ## Run
 
@@ -24,6 +24,9 @@ cd ../lab_9_ticket_management_mcp/mcp-server && npm start
 cd lab_9_agent && npm install && npm start    # http://localhost:5000
 ```
 
+Open the UI and sign in with an MCP user (`galamo` / `romanb` — passwords from the MCP server `.env`).
+The JWT from `POST /auth` is stored in the browser and sent on every agent API call.
+
 ## .env
 
 | Var | Default |
@@ -32,12 +35,15 @@ cd lab_9_agent && npm install && npm start    # http://localhost:5000
 | `OPENROUTER_MODEL` | `openrouter:gpt-5.4` |
 | `PORT` | `5000` |
 | `MCP_URL` | `http://localhost:3300/mcp` |
-| `MCP_AUTH_TOKEN` | `dummy-ticket-token` (needed by `create_ticket`) |
+| `MCP_AUTH_URL` | derived from `MCP_URL` → `…/auth` |
 
 ## API
 
-| Method | Path | Notes |
-|---|---|---|
-| POST | `/api/chat` | `{ messages: [{role, content}] }` → `{ reply, toolCalls }` |
-| GET | `/api/tools` | tools currently loaded from MCP |
-| POST | `/api/tools/reload` | reconnect to MCP and reload tools (after you add a tool) |
+| Method | Path | Auth | Notes |
+|---|---|---|---|
+| POST | `/api/auth/login` | public | `{ username, password }` → `{ token, role, username }` (via MCP `/auth`) |
+| POST | `/api/auth/logout` | public | drops in-memory MCP agent session |
+| GET | `/api/auth/me` | Bearer JWT | validates JWT by opening an MCP session |
+| POST | `/api/chat` | Bearer JWT | `{ messages: [{role, content}] }` → `{ reply, toolCalls }` |
+| GET | `/api/tools` | Bearer JWT | tools currently loaded from MCP |
+| POST | `/api/tools/reload` | Bearer JWT | reconnect to MCP and reload tools |

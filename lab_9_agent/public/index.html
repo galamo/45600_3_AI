@@ -7,28 +7,54 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <aside id="sidebar">
-    <h2>MCP tools</h2>
-    <ul id="tools"><li class="muted">Loading…</li></ul>
-    <button id="reload">Reload tools</button>
-    <h2>Try</h2>
-    <ul id="examples">
-      <li>Who are the users in the system?</li>
-      <li>Show all tickets assigned to Alice</li>
-      <li>Find tickets about login</li>
-      <li>Create a ticket "Fix footer" in the first project</li>
-      <li>Move ticket 3 to in_review</li>
-    </ul>
-  </aside>
-
-  <main>
-    <header><h1>Ticket Agent</h1><button id="clear">New chat</button></header>
-    <div id="chat"></div>
-    <form id="form">
-      <input id="input" placeholder="Ask about tickets, users, projects…" autocomplete="off" />
-      <button type="submit">Send</button>
+  <div id="login-gate" class="login-gate" hidden>
+    <form id="login-form" class="login-card">
+      <h1>Sign in</h1>
+      <p class="login-hint">Authenticate with the ticket MCP server to use the agent.</p>
+      <label>
+        Username
+        <input id="login-user" name="username" autocomplete="username" required />
+      </label>
+      <label>
+        Password
+        <input id="login-pass" name="password" type="password" autocomplete="current-password" required />
+      </label>
+      <p id="login-error" class="error" hidden></p>
+      <button type="submit">Authorize</button>
     </form>
-  </main>
+  </div>
+
+  <div id="app" class="app" hidden>
+    <aside id="sidebar">
+      <h2>MCP tools</h2>
+      <ul id="tools"><li class="muted">Loading…</li></ul>
+      <button id="reload">Reload tools</button>
+      <h2>Try</h2>
+      <ul id="examples">
+        <li>Who are the users in the system?</li>
+        <li>Show all tickets assigned to Alice</li>
+        <li>Find tickets about login</li>
+        <li>Create a ticket "Fix footer" in the first project</li>
+        <li>Move ticket 3 to in_review</li>
+      </ul>
+    </aside>
+
+    <main>
+      <header>
+        <h1>Ticket Agent</h1>
+        <div class="header-actions">
+          <span id="session" class="session muted"></span>
+          <button id="logout" type="button">Log out</button>
+          <button id="clear" type="button">New chat</button>
+        </div>
+      </header>
+      <div id="chat"></div>
+      <form id="form">
+        <input id="input" placeholder="Ask about tickets, users, projects…" autocomplete="off" />
+        <button type="submit">Send</button>
+      </form>
+    </main>
+  </div>
 
   <script src="app.js"></script>
 </body>
