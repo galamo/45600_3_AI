@@ -1,21 +1,23 @@
 /**
  * Creates the Ticket MCP server and registers its tools.
  *
- * Implemented:
- *   - get_ticket      : find tickets by id, title (name) or assignee
- *   - create_ticket   : create a ticket (requires dummy Authorization header)
- *
- * Prepared (stubs — not implemented yet):
- *   - close_ticket
- *   - change_ticket_status
- *   - delete_ticket
+ * Access is role based (role comes from the JWT issued by POST /auth):
+ *   viewer + admin:
+ *     - get_ticket      : find tickets by id, title (name) or assignee
+ *     - get_users       : list users that can be assigned to tickets
+ *   admin only:
+ *     - create_ticket         : create a ticket
+ *     - delete_ticket         : delete a ticket
+ *     - close_ticket          : set status to closed
+ *     - change_ticket_status  : set status to any allowed value
  */
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { backend } from "./lib/backend-client.js";
+import { ROLES } from "./lib/auth.js";
 
-// Dummy auth token — send "Authorization: Bearer dummy-ticket-token"
-export const DUMMY_AUTH_TOKEN = process.env.MCP_AUTH_TOKEN || "dummy-ticket-token";
+const READ_ROLES = [ROLES.ADMIN, ROLES.VIEWER];
+const WRITE_ROLES = [ROLES.ADMIN];
 
 const STATUSES = ["open", "in_progress", "in_review", "done", "closed"];
 const statusSchema = z.enum(STATUSES).describe(`Ticket status: ${STATUSES.join(", ")}`);
@@ -32,12 +34,9 @@ function fail(message) {
   return { content: [{ type: "text", text: JSON.stringify({ error: message }) }], isError: true };
 }
 
-function notImplemented(tool, args) {
-  return fail(`${tool} is not implemented yet. Received: ${JSON.stringify(args)}`);
-}
-
-function isAuthorized(extra) {
-  return extra?.authInfo?.token === DUMMY_AUTH_TOKEN;
+/** authInfo is rebuilt from the JWT on every request, so the session id alone grants nothing. */
+function roleOf(extra) {
+  return extra?.authInfo?.extra?.role;
 }
 
 /** Compact ticket shape returned to the model. */
@@ -88,11 +87,29 @@ function withLogging(name, handler) {
   };
 }
 
-export function createTicketMcpServer() {
+function withRole(name, allowedRoles, handler) {
+  return withLogging(name, async (args, extra) => {
+    const role = roleOf(extra);
+    if (!allowedRoles.includes(role)) {
+      return fail(`Forbidden: ${name} requires role ${allowedRoles.join(" or ")} (got ${role ?? "none"}).`);
+    }
+    return handler(args, extra);
+  });
+}
+
+/**
+ * @param {{ role?: string }} options
+ *   role — role from the JWT the session was opened with; controls which tools are exposed.
+ */
+export function createTicketMcpServer({ role } = {}) {
   const server = new McpServer(
     { name: "lab9-ticket-mcp", version: "1.0.0" },
     { capabilities: { tools: {} } }
   );
+  const canRead = READ_ROLES.includes(role);
+  const canWrite = WRITE_ROLES.includes(role);
+
+  if (!canRead) return server;
 
   // ---------------------------------------------------------------- get_ticket
   server.registerTool(
@@ -108,7 +125,7 @@ export function createTicketMcpServer() {
       },
       annotations: { readOnlyHint: true },
     },
-    withLogging("get_ticket", async ({ id, name, assignee }) => {
+    withRole("get_ticket", READ_ROLES, async ({ id, name, assignee }) => {
       if (id == null && !name && !assignee) {
         return fail("Provide at least one of: id, name, assignee");
       }
@@ -121,20 +138,35 @@ export function createTicketMcpServer() {
     })
   );
 
+  // ----------------------------------------------------------------- get_users
   server.registerTool(
     "get_users",
     {
       title: "Get users",
       description:
-        "Find tickets. Look up a single ticket by id, or search by title (name, partial match) and/or assignee (user name or email). At least one argument is required.",
+        "List all users that can be assigned to a ticket. Optionally filter by name or email (partial, case-insensitive). Use the returned name, email or id as the 'assignee' in create_ticket.",
+      inputSchema: {
+        query: z.string().optional().describe("Optional text contained in the user's name or email"),
+      },
+      annotations: { readOnlyHint: true },
     },
-    withLogging("get_users", async ({ id, name, assignee }) => {
-      const tickets = await backend.listTickets({ q: name, assignee });
-      return ok({ count: tickets.length, tickets: tickets.map(summarize) });
+    withRole("get_users", READ_ROLES, async ({ query }) => {
+      const { users } = await backend.meta();
+      const q = query?.toLowerCase();
+      const matches = q
+        ? users.filter((u) => u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q))
+        : users;
+      return ok({
+        count: matches.length,
+        users: matches.map((u) => ({ id: u.id, name: u.name, email: u.email })),
+      });
     })
   );
 
-
+  // ======================================================================
+  // Admin-only tools
+  // ======================================================================
+  if (!canWrite) return server;
 
   // ------------------------------------------------------------- create_ticket
   server.registerTool(
@@ -142,7 +174,7 @@ export function createTicketMcpServer() {
     {
       title: "Create ticket",
       description:
-        "Create a new ticket. Requires the Authorization header 'Bearer dummy-ticket-token'. Project, sprint and assignee may be given by id or name (assignee also by email).",
+        "Create a new ticket. Project, sprint and assignee may be given by id or name (assignee also by email).",
       inputSchema: {
         title: z.string().min(1).describe("Ticket title"),
         description: z.string().optional().describe("Ticket description"),
@@ -151,20 +183,10 @@ export function createTicketMcpServer() {
         status: statusSchema.optional().describe("Initial status (default: open)"),
         assignee: z.string().optional().describe("Assignee name, email or id"),
       },
-      _meta: {
-        header_authorization: {
-          type: "bearer",
-          description: "Send Authorization: Bearer dummy-ticket-token",
-        },
-      },
     },
-    withLogging("create_ticket", async (args, extra) => {
-      if (!isAuthorized(extra)) {
-        return fail("Unauthorized. Send header 'Authorization: Bearer dummy-ticket-token'.");
-      }
-
+    withRole("create_ticket", WRITE_ROLES, async (args) => {
       const { users, projects, sprints } = await backend.meta();
-
+      const checkUserRole = true;
       const project = findByIdOrName(projects, args.project);
       if (args.project && !project) return fail(`Unknown project: ${args.project}`);
 
@@ -187,27 +209,20 @@ export function createTicketMcpServer() {
     })
   );
 
-  // ======================================================================
-  // Prepared tools — schemas are defined, handlers are NOT implemented yet.
-  // ======================================================================
-
   // -------------------------------------------------------------- close_ticket
   server.registerTool(
     "close_ticket",
     {
       title: "Close ticket",
-      description: "[NOT IMPLEMENTED] Close a ticket (sets status to 'closed').",
+      description: "Close a ticket (sets status to 'closed').",
       inputSchema: {
         id: z.number().int().positive().describe("Ticket id to close"),
         comment: z.string().optional().describe("Optional closing comment"),
       },
     },
-    withLogging("close_ticket", async (args, _extra) => {
-      // TODO: implement
-      //   1. (optional) require isAuthorized(extra)
-      //   2. await backend.updateTicket(args.id, { status: "closed" })
-      //   3. return ok({ closed: true, ticket: summarize(ticket) })
-      return notImplemented("close_ticket", args);
+    withRole("close_ticket", WRITE_ROLES, async (args, _extra) => {
+      const ticket = await backend.updateTicket(args.id, { status: "closed" });
+      return ok({ closed: true, ticket: summarize(ticket), comment: args.comment ?? null });
     })
   );
 
@@ -216,17 +231,15 @@ export function createTicketMcpServer() {
     "change_ticket_status",
     {
       title: "Change ticket status",
-      description: "[NOT IMPLEMENTED] Change the status of a ticket.",
+      description: "Change the status of a ticket.",
       inputSchema: {
         id: z.number().int().positive().describe("Ticket id"),
         status: statusSchema,
       },
     },
-    withLogging("change_ticket_status", async (args, _extra) => {
-      // TODO: implement
-      //   1. await backend.updateTicket(args.id, { status: args.status })
-      //   2. return ok({ updated: true, ticket: summarize(ticket) })
-      return notImplemented("change_ticket_status", args);
+    withRole("change_ticket_status", WRITE_ROLES, async (args, _extra) => {
+      const ticket = await backend.updateTicket(args.id, { status: args.status });
+      return ok({ updated: true, ticket: summarize(ticket) });
     })
   );
 
@@ -235,18 +248,15 @@ export function createTicketMcpServer() {
     "delete_ticket",
     {
       title: "Delete ticket",
-      description: "[NOT IMPLEMENTED] Permanently delete a ticket.",
+      description: "Permanently delete a ticket.",
       inputSchema: {
         id: z.number().int().positive().describe("Ticket id to delete"),
       },
       annotations: { destructiveHint: true },
     },
-    withLogging("delete_ticket", async (args, _extra) => {
-      // TODO: implement
-      //   1. require isAuthorized(extra) — deleting should be protected
-      //   2. await backend.deleteTicket(args.id)
-      //   3. return ok({ deleted: true, id: args.id })
-      return notImplemented("delete_ticket", args);
+    withRole("delete_ticket", WRITE_ROLES, async ({ id }) => {
+      await backend.deleteTicket(id);
+      return ok({ deleted: true, id });
     })
   );
 
