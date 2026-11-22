@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lab 9 — browser → agent → MCP → tickets</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  --ground:#0f1720;
+  --panel:#16212d;
+  --line:#2a3a4b;
+  --ink:#e6edf3;
+  --muted:#8297ab;
+  --dim:#4d6276;
+  --req:#5cc8ff;
+  --res:#ffb547;
+  --ok:#3ddc97;
+  --tool:#b18cff;
+  --sse:#5eead4;
+  --display:"Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
+  --mono:"IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  color-scheme:dark;
+}
+html,body{background:var(--ground);color:var(--ink)}
+body{
+  font-family:var(--mono);
+  margin:0;
+  padding:28px max(16px,env(safe-area-inset-right)) 48px max(16px,env(safe-area-inset-left));
+  background-image:
+    radial-gradient(ellipse 70% 45% at 8% -8%, rgba(92,200,255,.07), transparent 55%),
+    radial-gradient(ellipse 50% 35% at 92% 0%, rgba(177,140,255,.05), transparent 50%);
+}
+.wrap{max-width:1120px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+header{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:8px 24px}
+h1{font-family:var(--display);font-weight:700;font-size:clamp(1.5rem,3.2vw,2.15rem);margin:0;letter-spacing:-.01em;text-wrap:balance}
+h1 em{font-style:normal;color:var(--req)}
+.meta{color:var(--muted);font-size:.78rem;letter-spacing:.07em;text-transform:uppercase}
+.lede{margin:-4px 0 0;color:var(--muted);font-size:.92rem;line-height:1.55;max-width:78ch}
+.lede code{color:var(--req)}
+
+.stage{
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:16px;
+  overflow:hidden;
+  position:relative;
+}
+.stage svg{display:block;width:100%;height:auto}
+svg text{font-family:var(--mono)}
+
+.caption{display:grid;grid-template-columns:auto 1fr;gap:14px;align-items:center;min-height:3.6em}
+.caption .n{font-family:var(--display);font-size:2rem;font-weight:700;color:var(--muted);font-variant-numeric:tabular-nums;width:2.2ch}
+.caption p{margin:0;font-size:.95rem;line-height:1.5}
+.caption code{color:var(--req)}
+.caption code.r{color:var(--res)}
+.caption code.t{color:var(--tool)}
+.caption code.o{color:var(--ok)}
+.caption code.s{color:var(--sse)}
+
+.rail{display:grid;grid-template-columns:repeat(8,1fr);gap:6px}
+.rail div{height:4px;border-radius:2px;background:var(--line);transition:background .35s}
+.rail div.on{background:var(--req)}
+.rail div.on.done{background:var(--ok)}
+
+.controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+button{
+  font:500 .85rem var(--mono);
+  color:var(--ink);
+  background:transparent;
+  border:1px solid var(--line);
+  border-radius:8px;
+  padding:9px 16px;
+  cursor:pointer;
+  letter-spacing:.03em;
+}
+button:hover{border-color:var(--muted)}
+button:focus-visible{outline:2px solid var(--req);outline-offset:2px}
+button.primary{background:var(--ink);color:var(--ground);border-color:var(--ink)}
+.speed{margin-left:auto;display:flex;gap:4px;align-items:center;color:var(--muted);font-size:.8rem}
+.speed button{padding:6px 10px}
+.speed button[aria-pressed="true"]{border-color:var(--req);color:var(--req)}
+.sound{display:flex;gap:4px;align-items:center;color:var(--muted);font-size:.8rem}
+.sound button[aria-pressed="true"]{border-color:var(--ok);color:var(--ok)}
+@media (max-width:560px){.speed,.sound{margin-left:0}}
+
+.anatomy{border-top:1px solid var(--line);padding-top:22px;display:flex;flex-direction:column;gap:16px}
+.anatomy h2{margin:0;font-family:var(--display);font-weight:500;font-size:1.15rem}
+.flow{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.flow svg{display:block;width:100%;height:auto}
+.pipe-flow{stroke-dasharray:5 7;animation:flow 1.4s linear infinite}
+@keyframes flow{to{stroke-dashoffset:-24}}
+@media (prefers-reduced-motion:reduce){.pipe-flow{animation:none}}
+.notes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;font-size:.82rem;line-height:1.55;color:var(--muted)}
+.notes strong{display:block;color:var(--ink);font-weight:500;margin-bottom:4px}
+.notes code{color:var(--req)}
+@media (max-width:760px){.notes{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Lab 9 — <em>ticket agent</em> discovers MCP tools</h1>
+    <span class="meta">browser · express · agent · mcp · backend</span>
+  </header>
+  <p class="lede">Chat leaves the browser for <code>POST /api/chat</code> on Express <code>:5000</code>. The LangChain <code>createAgent</code> (OpenRouter) only knows tools that <code>MultiServerMCPClient.getTools()</code> discovered from MCP <code>:3300/mcp</code> — which talks to the ticket backend on <code>:4000</code>. Nothing is hardcoded.</p>
+
+  <div class="stage">
+  <svg viewBox="0 0 1080 520" role="img" aria-label="Animation of ticket agent boot, tool discovery, and a chat round-trip through MCP to the backend">
+    <defs>
+      <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+        <feGaussianBlur stdDeviation="7" result="b"/>
+        <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+      <pattern id="grid" width="28" height="28" patternUnits="userSpaceOnUse">
+        <path d="M28 0H0V28" fill="none" stroke="#1a2735" stroke-width="1"/>
+      </pattern>
+    </defs>
+    <rect width="1080" height="520" fill="url(#grid)"/>
+
+    <g fill="none" stroke-width="2" stroke-dasharray="5 8" opacity=".28">
+      <path d="M210 160 H236"/>
+      <path d="M406 160 H432"/>
+      <path d="M632 160 H658"/>
+      <path d="M838 160 H864"/>
+      <path d="M236 380 H210"/>
+    </g>
+
+    <!-- BROWSER -->
+    <g id="client" transform="translate(0 0)">
+      <rect id="clientFrame" x="28" y="40" width="182" height="400" rx="16" fill="#0f1720" stroke="#2a3a4b" stroke-width="2"/>
+      <path d="M28 54a16 16 0 0 1 16-14h150a16 16 0 0 1 16 14v20H28z" fill="#1d2a38"/>
+      <circle cx="48" cy="50" r="4" fill="#ff6b6b"/><circle cx="62" cy="50" r="4" fill="#ffb547"/><circle cx="76" cy="50" r="4" fill="#3ddc97"/>
+      <text x="92" y="54" fill="#8297ab" font-size="11">public/</text>
+
+      <rect x="44" y="96" width="150" height="52" rx="10" fill="#16212d" stroke="#2a3a4b"/>
+      <text x="56" y="116" fill="#8297ab" font-size="10">YOU</text>
+      <text id="userBubble" x="56" y="136" fill="#e6edf3" font-size="11">tickets for Alice</text>
+
+      <rect id="botBubble" x="44" y="164" width="150" height="72" rx="10" fill="#121c28" stroke="#2a3a4b" opacity=".45"/>
+      <text id="botLabel" x="56" y="186" fill="#4d6276" font-size="10">ASSISTANT</text>
+      <text id="botLine1" x="56" y="206" fill="#4d6276" font-size="11">waiting…</text>
+      <text id="botLine2" x="56" y="222" fill="#4d6276" font-size="10"></text>
+
+      <rect id="sideTools" x="44" y="252" width="150" height="128" rx="10" fill="#121c28" stroke="#2a3a4b" opacity=".5"/>
+      <text x="56" y="274" fill="#4d6276" font-size="10">MCP TOOLS</text>
+      <text id="sideT0" x="56" y="296" fill="#4d6276" font-size="10">· …</text>
+      <text id="sideT1" x="56" y="314" fill="#4d6276" font-size="10">· …</text>
+      <text id="sideT2" x="56" y="332" fill="#4d6276" font-size="10">· …</text>
+      <text id="sideT3" x="56" y="350" fill="#4d6276" font-size="10">GET /api/tools</text>
+      <text id="usedTools" x="56" y="368" fill="#4d6276" font-size="9"></text>
+
+      <text x="119" y="410" fill="#8297ab" font-size="12" text-anchor="middle" letter-spacing="2">BROWSER</text>
+      <text x="119" y="428" fill="#4d6276" font-size="10" text-anchor="middle">chat · tool sidebar</text>
+    </g>
+
+    <!-- EXPRESS :5000 -->
+    <g id="api" transform="translate(0 0)">
+      <rect id="apiFrame" x="236" y="40" width="170" height="400" rx="16" fill="#0f1720" stroke="#2a3a4b" stroke-width="2"/>
+      <path d="M236 54a16 16 0 0 1 16-14h138a16 16 0 0 1 16 14v20H236z" fill="#1d2a38"/>
+      <circle class="apiLed" cx="256" cy="50" r="4" fill="#2a3a4b"/><circle class="apiLed" cx="270" cy="50" r="4" fill="#2a3a4b"/>
+      <text x="286" y="54" fill="#8297ab" font-size="11">express</text>
+
+      <rect id="routeCard" x="252" y="110" width="138" height="64" rx="12" fill="#16212d" stroke="#2a3a4b"/>
+      <text x="266" y="134" fill="#8297ab" font-size="10">ROUTE</text>
+      <text id="routeText" x="266" y="156" fill="#e6edf3" font-size="12" font-weight="600">POST /api/chat</text>
+
+      <rect id="toolsApiCard" x="252" y="190" width="138" height="56" rx="12" fill="#121c28" stroke="#2a3a4b" opacity=".5"/>
+      <text x="266" y="214" fill="#4d6276" font-size="10">ALSO</text>
+      <text id="toolsApiText" x="266" y="234" fill="#4d6276" font-size="11">/api/tools</text>
+
+      <rect id="portCard" x="252" y="268" width="138" height="48" rx="12" fill="#121c28" stroke="#2a3a4b"/>
+      <text x="266" y="290" fill="#8297ab" font-size="10">LISTEN</text>
+      <text x="266" y="308" fill="#e6edf3" font-size="13">:5000</text>
+
+      <text x="321" y="410" fill="#8297ab" font-size="12" text-anchor="middle" letter-spacing="2">API</text>
+      <text x="321" y="428" fill="#4d6276" font-size="10" text-anchor="middle">server.js</text>
+    </g>
+
+    <!-- AGENT -->
+    <g id="agent" transform="translate(0 0)">
+      <rect id="agentFrame" x="432" y="40" width="200" height="400" rx="16" fill="#0f1720" stroke="#2a3a4b" stroke-width="2"/>
+      <path d="M432 54a16 16 0 0 1 16-14h168a16 16 0 0 1 16 14v20H432z" fill="#1d2a38"/>
+      <circle class="agentLed" cx="452" cy="50" r="4" fill="#2a3a4b"/><circle class="agentLed" cx="466" cy="50" r="4" fill="#2a3a4b"/>
+      <text x="482" y="54" fill="#8297ab" font-size="11">langchain</text>
+
+      <rect id="thinkCard" x="448" y="110" width="168" height="88" rx="12" fill="#16212d" stroke="#2a3a4b"/>
+      <text x="462" y="134" fill="#8297ab" font-size="10">createAgent</text>
+      <text id="thinkText" x="462" y="158" fill="#e6edf3" font-size="13" font-weight="600">idle</text>
+      <text id="thinkSub" x="462" y="178" fill="#4d6276" font-size="11">OpenRouter model</text>
+
+      <rect id="mcpClientCard" x="448" y="214" width="168" height="72" rx="12" fill="#121c28" stroke="#2a3a4b" opacity=".5"/>
+      <text x="462" y="238" fill="#4d6276" font-size="10">MultiServerMCPClient</text>
+      <text id="mcpClientText" x="462" y="258" fill="#4d6276" font-size="11">not connected</text>
+      <text id="mcpClientSub" x="462" y="276" fill="#4d6276" font-size="10">getTools()</text>
+
+      <rect id="planCard" x="448" y="302" width="168" height="48" rx="12" fill="#121c28" stroke="#2a3a4b" opacity=".45"/>
+      <text x="462" y="324" fill="#4d6276" font-size="10">REPLY</text>
+      <text id="planText" x="462" y="342" fill="#4d6276" font-size="11">{ reply, toolCalls }</text>
+
+      <text x="532" y="410" fill="#8297ab" font-size="12" text-anchor="middle" letter-spacing="2">AGENT</text>
+      <text x="532" y="428" fill="#4d6276" font-size="10" text-anchor="middle">agent.js · no hardcode</text>
+    </g>
+
+    <!-- MCP :3300 -->
+    <g id="mcp" transform="translate(0 0)">
+      <rect id="mcpFrame" x="658" y="40" width="180" height="400" rx="16" fill="#0f1720" stroke="#2a3a4b" stroke-width="2"/>
+      <path d="M658 54a16 16 0 0 1 16-14h148a16 16 0 0 1 16 14v20H658z" fill="#1d2a38"/>
+      <circle class="mcpLed" cx="678" cy="50" r="4" fill="#2a3a4b"/><circle class="mcpLed" cx="692" cy="50" r="4" fill="#2a3a4b"/>
+      <text x="708" y="54" fill="#8297ab" font-size="11">ticket MCP</text>
+
+      <rect id="mcpUrlCard" x="674" y="110" width="148" height="44" rx="10" fill="#16212d" stroke="#2a3a4b"/>
+      <text x="688" y="130" fill="#8297ab" font-size="10">ENDPOINT</text>
+      <text id="mcpUrlText" x="688" y="146" fill="#e6edf3" font-size="12">:3300/mcp</text>
+
+      <g id="tool0">
+        <rect class="tBox" x="674" y="170" width="148" height="36" rx="10" fill="#16212d" stroke="#2a3a4b"/>
+        <circle class="tDot" cx="690" cy="188" r="4" fill="#2a3a4b"/>
+        <text x="702" y="192" fill="#e6edf3" font-size="11" font-weight="600">get_ticket</text>
+      </g>
+      <g id="tool1">
+        <rect class="tBox" x="674" y="214" width="148" height="36" rx="10" fill="#16212d" stroke="#2a3a4b"/>
+        <circle class="tDot" cx="690" cy="232" r="4" fill="#2a3a4b"/>
+        <text x="702" y="236" fill="#e6edf3" font-size="11" font-weight="600">get_users</text>
+      </g>
+      <g id="tool2">
+        <rect class="tBox" x="674" y="258" width="148" height="36" rx="10" fill="#16212d" stroke="#2a3a4b"/>
+        <circle class="tDot" cx="690" cy="276" r="4" fill="#2a3a4b"/>
+        <text x="702" y="280" fill="#e6edf3" font-size="11" font-weight="600">create_ticket</text>
+      </g>
+      <g id="tool3" opacity=".55">
+        <rect class="tBox" x="674" y="302" width="148" height="36" rx="10" fill="#121c28" stroke="#2a3a4b"/>
+        <text x="688" y="324" fill="#4d6276" font-size="10">+ status · delete…</text>
+      </g>
+
+      <text x="748" y="410" fill="#8297ab" font-size="12" text-anchor="middle" letter-spacing="2">MCP</text>
+      <text x="748" y="428" fill="#4d6276" font-size="10" text-anchor="middle">tools/list · tools/call</text>
+    </g>
+
+    <!-- BACKEND :4000 -->
+    <g id="backend" transform="translate(0 0)">
+      <rect id="backendFrame" x="864" y="40" width="188" height="400" rx="16" fill="#0f1720" stroke="#2a3a4b" stroke-width="2"/>
+      <path d="M864 54a16 16 0 0 1 16-14h156a16 16 0 0 1 16 14v20H864z" fill="#1d2a38"/>
+      <circle class="beLed" cx="884" cy="50" r="4" fill="#2a3a4b"/><circle class="beLed" cx="898" cy="50" r="4" fill="#2a3a4b"/>
+      <text x="914" y="54" fill="#8297ab" font-size="11">ticket API</text>
+
+      <rect id="beRoute" x="880" y="120" width="156" height="64" rx="12" fill="#16212d" stroke="#2a3a4b"/>
+      <text x="894" y="144" fill="#8297ab" font-size="10">REST</text>
+      <text id="beRouteText" x="894" y="166" fill="#e6edf3" font-size="12" font-weight="600">:4000 /tickets</text>
+
+      <rect id="beData" x="880" y="204" width="156" height="100" rx="12" fill="#121c28" stroke="#2a3a4b" opacity=".5"/>
+      <text x="894" y="228" fill="#4d6276" font-size="10">STORE</text>
+      <text id="beLine1" x="894" y="252" fill="#4d6276" font-size="11">users · projects</text>
+      <text id="beLine2" x="894" y="272" fill="#4d6276" font-size="11">sprints · tickets</text>
+      <text id="beLine3" x="894" y="292" fill="#4d6276" font-size="11"></text>
+
+      <text x="958" y="410" fill="#8297ab" font-size="12" text-anchor="middle" letter-spacing="2">BACKEND</text>
+      <text x="958" y="428" fill="#4d6276" font-size="10" text-anchor="middle">lab_9 … /backend</text>
+    </g>
+
+    <g id="packet" opacity="0">
+      <rect id="pill" x="-90" y="-42" width="180" height="26" rx="13" fill="#16212d" stroke="#5cc8ff" stroke-width="1.6"/>
+      <text id="pillText" x="0" y="-24" fill="#5cc8ff" font-size="11" font-weight="500" text-anchor="middle"></text>
+      <circle id="dot" r="8" fill="#5cc8ff" filter="url(#glow)"/>
+    </g>
+
+    <g id="toast" opacity="0" transform="translate(540 52)">
+      <g id="toastInner">
+        <rect id="toastBg" x="-130" y="-22" width="260" height="44" rx="22" fill="#3ddc97" filter="url(#glow)"/>
+        <circle cx="-104" cy="0" r="12" fill="#0f1720"/>
+        <path d="M-109 0l4 4 8-9" fill="none" stroke="#3ddc97" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+        <text id="toastText" x="10" y="5" fill="#0f1720" font-size="14" font-weight="600" text-anchor="middle">Reply ready</text>
+      </g>
+    </g>
+  </svg>
+  </div>
+
+  <div class="caption" aria-live="polite">
+    <span class="n" id="stepN">0</span>
+    <p id="stepText">Boot the ticket agent — tools are discovered before any chat…</p>
+  </div>
+  <div class="rail" id="rail"><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div></div>
+
+  <div class="controls">
+    <button class="primary" id="play" type="button">Pause</button>
+    <button id="replay" type="button">Replay</button>
+    <div class="sound" role="group" aria-label="Sound">
+      Sound
+      <button type="button" id="soundBtn" aria-pressed="true">On</button>
+    </div>
+    <div class="speed" role="group" aria-label="Speed">Speed
+      <button type="button" data-s="0.5" aria-pressed="false">0.5×</button>
+      <button type="button" data-s="1" aria-pressed="true">1×</button>
+      <button type="button" data-s="1.5" aria-pressed="false">1.5×</button>
+    </div>
+  </div>
+
+  <section class="anatomy" aria-label="Static overview of the lab 9 agent path">
+    <h2>The same hop, at a glance</h2>
+    <div class="flow">
+      <svg viewBox="0 0 1080 160" role="img" aria-label="Browser to Express to agent to MCP to backend">
+        <rect width="1080" height="160" fill="#16212d"/>
+        <g>
+          <rect x="20" y="28" width="150" height="70" rx="12" fill="#0f1720" stroke="#5cc8ff" stroke-width="1.5"/>
+          <text x="95" y="58" fill="#5cc8ff" font-size="13" text-anchor="middle" font-weight="600">Browser</text>
+          <text x="95" y="78" fill="#8297ab" font-size="10" text-anchor="middle">public/</text>
+        </g>
+        <g>
+          <rect x="210" y="28" width="150" height="70" rx="12" fill="#0f1720" stroke="#ffb547" stroke-width="1.5"/>
+          <text x="285" y="58" fill="#ffb547" font-size="13" text-anchor="middle" font-weight="600">Express</text>
+          <text x="285" y="78" fill="#8297ab" font-size="10" text-anchor="middle">:5000</text>
+        </g>
+        <g>
+          <rect x="400" y="28" width="160" height="70" rx="12" fill="#0f1720" stroke="#3ddc97" stroke-width="1.5"/>
+          <text x="480" y="58" fill="#3ddc97" font-size="13" text-anchor="middle" font-weight="600">createAgent</text>
+          <text x="480" y="78" fill="#8297ab" font-size="10" text-anchor="middle">OpenRouter · getTools</text>
+        </g>
+        <g>
+          <rect x="600" y="28" width="150" height="70" rx="12" fill="#0f1720" stroke="#b18cff" stroke-width="1.5"/>
+          <text x="675" y="58" fill="#b18cff" font-size="13" text-anchor="middle" font-weight="600">MCP</text>
+          <text x="675" y="78" fill="#8297ab" font-size="10" text-anchor="middle">:3300/mcp</text>
+        </g>
+        <g>
+          <rect x="790" y="28" width="150" height="70" rx="12" fill="#0f1720" stroke="#5eead4" stroke-width="1.5"/>
+          <text x="865" y="58" fill="#5eead4" font-size="13" text-anchor="middle" font-weight="600">Backend</text>
+          <text x="865" y="78" fill="#8297ab" font-size="10" text-anchor="middle">:4000</text>
+        </g>
+        <path class="pipe-flow" d="M170 63 H210" fill="none" stroke="#5cc8ff" stroke-width="1.6"/>
+        <path d="M202 57 l8 6 l-8 6" fill="none" stroke="#5cc8ff" stroke-width="1.6"/>
+        <path class="pipe-flow" d="M360 63 H400" fill="none" stroke="#ffb547" stroke-width="1.6"/>
+        <path d="M392 57 l8 6 l-8 6" fill="none" stroke="#ffb547" stroke-width="1.6"/>
+        <path class="pipe-flow" d="M560 63 H600" fill="none" stroke="#b18cff" stroke-width="1.6"/>
+        <path d="M592 57 l8 6 l-8 6" fill="none" stroke="#b18cff" stroke-width="1.6"/>
+        <path class="pipe-flow" d="M750 63 H790" fill="none" stroke="#5eead4" stroke-width="1.6"/>
+        <path d="M782 57 l8 6 l-8 6" fill="none" stroke="#5eead4" stroke-width="1.6"/>
+        <path class="pipe-flow" d="M940 63 H1020" fill="none" stroke="#3ddc97" stroke-width="1.4" opacity=".5"/>
+        <text x="1020" y="68" fill="#3ddc97" font-size="11">JSON → UI</text>
+        <text x="95" y="128" fill="#4d6276" font-size="10" text-anchor="middle">chat + sidebar</text>
+        <text x="285" y="128" fill="#4d6276" font-size="10" text-anchor="middle">server.js</text>
+        <text x="480" y="128" fill="#4d6276" font-size="10" text-anchor="middle">agent.js</text>
+        <text x="675" y="128" fill="#4d6276" font-size="10" text-anchor="middle">discovered tools</text>
+        <text x="865" y="128" fill="#4d6276" font-size="10" text-anchor="middle">real ticket data</text>
+      </svg>
+    </div>
+    <div class="notes">
+      <p><strong>Discover, then chat</strong><code>initAgent()</code> opens <code>MultiServerMCPClient</code> to <code class="t">MCP_URL</code> and calls <code>getTools()</code>. The sidebar’s <code>GET /api/tools</code> shows whatever the MCP exposed — reload after you add a tool.</p>
+      <p><strong>The model never invents tickets</strong><code class="r">createAgent</code> + OpenRouter only answers after tool results. A typical turn: <code class="t">get_ticket</code> / <code class="t">get_users</code> → MCP → backend <code>:4000</code>.</p>
+      <p><strong>Reply carries provenance</strong><code>POST /api/chat</code> returns <code class="o">{ reply, toolCalls }</code>. The UI lists which MCP tools that answer used — same loop every message.</p>
+    </div>
+  </section>
+</div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const REQ = '#5cc8ff', RES = '#ffb547', OK = '#3ddc97', TOOL = '#b18cff', SSE = '#5eead4', LINE = '#2a3a4b';
+
+  const packet = $('packet'), pill = $('pill'), pillText = $('pillText'), dot = $('dot');
+  const toast = $('toast'), toastInner = $('toastInner'), toastText = $('toastText');
+  const stepN = $('stepN'), stepText = $('stepText');
+  const rail = [...$('rail').children];
+  const apiLeds = [...document.querySelectorAll('.apiLed')];
+  const agentLeds = [...document.querySelectorAll('.agentLed')];
+  const mcpLeds = [...document.querySelectorAll('.mcpLed')];
+  const beLeds = [...document.querySelectorAll('.beLed')];
+
+  const floaters = [
+    { id: 'client', amp: 2.8, speed: 0.2, phase: 0.1 },
+    { id: 'api', amp: 2.4, speed: 0.17, phase: 1.2 },
+    { id: 'agent', amp: 2.8, speed: 0.19, phase: 2.1 },
+    { id: 'mcp', amp: 2.2, speed: 0.15, phase: 3.0 },
+    { id: 'backend', amp: 2.0, speed: 0.14, phase: 4.0 },
+  ];
+
+  const P = [
+    { k:'idle', d:1.2, step:0, txt:'Boot the ticket agent — tools are discovered before any chat…', tone:'rest' },
+    { k:'boot', d:1.7, step:1, txt:'Express starts on <code>:5000</code> and calls <code>initAgent()</code>. Still no user message.', tone:'soft' },
+    { k:'toMcpList', d:2.0, step:2, from:[632,160], to:[674,188], label:'getTools()', c:TOOL, txt:'<code>MultiServerMCPClient</code> hits MCP <code class="t">:3300/mcp</code> and lists tools — nothing hardcoded in <code>agent.js</code>.', tone:'whoosh' },
+    { k:'discover', d:2.0, step:2, txt:'Discovered: <code class="t">get_ticket</code>, <code class="t">get_users</code>, <code class="t">create_ticket</code>, status/delete helpers… Browser sidebar loads via <code>GET /api/tools</code>.', tone:'chime' },
+    { k:'type', d:1.8, step:3, txt:'You ask: <code>“Show tickets assigned to Alice”</code>. Chat history posts to the only door: <code>POST /api/chat</code>.', tone:'soft' },
+    { k:'toApi', d:1.9, step:4, from:[210,160], to:[252,150], label:'POST /api/chat', c:REQ, txt:'Browser → Express. Body is <code>{ messages }</code>. Server hands off to <code>chat()</code>.', tone:'whoosh' },
+    { k:'toAgent', d:1.8, step:5, from:[406,160], to:[448,150], label:'agent.invoke', c:RES, txt:'API → <code class="r">createAgent</code> with OpenRouter. System prompt: use tools, never invent ticket ids.', tone:'whoosh' },
+    { k:'think', d:1.7, step:5, txt:'The model chooses a discovered tool — here <code class="t">get_ticket({ assignee: "Alice" })</code>.', tone:'blip' },
+    { k:'toMcp', d:1.9, step:6, from:[632,188], to:[700,188], label:'tools/call get_ticket', c:TOOL, txt:'Agent → MCP: <code class="t">tools/call</code> on the live session. Auth header from <code>MCP_AUTH_TOKEN</code>.', tone:'whoosh' },
+    { k:'toBackend', d:1.9, step:6, from:[838,188], to:[880,160], label:'GET :4000', c:SSE, txt:'MCP → ticket backend <code class="s">:4000</code>. Real store data — users, projects, tickets.', tone:'whoosh' },
+    { k:'fromBackend', d:1.7, step:7, from:[880,250], to:[838,250], label:'ticket JSON', c:OK, txt:'Backend rows return to MCP, then as a tool result into the agent loop.', tone:'whoosh' },
+    { k:'reply', d:1.6, step:7, txt:'Agent writes a short answer with real assignees/statuses. Response shape: <code class="o">{ reply, toolCalls }</code>.', tone:'soft' },
+    { k:'toClient', d:2.0, step:8, from:[236,300], to:[174,200], label:'200 · reply', c:OK, txt:'JSON reaches the chatbot. UI shows the answer and which tools that turn used.', tone:'whoosh' },
+    { k:'done', d:2.8, step:8, txt:'Pattern: <strong>discover once → chat loop</strong>. Browser → :5000 → agent → :3300/mcp → :4000 → back.', tone:'resolve' },
+  ];
+
+  const at = k => P.findIndex(p => p.k === k);
+  const total = P.reduce((a, p) => a + p.d, 0);
+  let t = 0, speed = 1, playing = true, last = null, soundOn = true;
+  let lastToneKey = null;
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  const ease = x => x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+  const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+  const back = x => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); };
+  const lerp = (a, b, u) => a + (b - a) * u;
+
+  let audioCtx = null;
+  function ensureAudio(){
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    return audioCtx;
+  }
+
+  function tone(kind){
+    if (!soundOn || reduce) return;
+    try {
+      const ctx = ensureAudio();
+      const now = ctx.currentTime;
+      const master = ctx.createGain();
+      master.gain.value = 0.07;
+      master.connect(ctx.destination);
+
+      const beep = (freq, start, dur, type = 'sine', gain = 1) => {
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.type = type;
+        o.frequency.setValueAtTime(freq, now + start);
+        g.gain.setValueAtTime(0, now + start);
+        g.gain.linearRampToValueAtTime(0.9 * gain, now + start + 0.03);
+        g.gain.exponentialRampToValueAtTime(0.001, now + start + dur);
+        o.connect(g); g.connect(master);
+        o.start(now + start); o.stop(now + start + dur + 0.02);
+      };
+
+      if (kind === 'whoosh'){
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        const f = ctx.createBiquadFilter();
+        o.type = 'triangle';
+        o.frequency.setValueAtTime(220, now);
+        o.frequency.exponentialRampToValueAtTime(640, now + 0.42);
+        f.type = 'lowpass';
+        f.frequency.setValueAtTime(900, now);
+        f.frequency.exponentialRampToValueAtTime(1800, now + 0.4);
+        g.gain.setValueAtTime(0.0001, now);
+        g.gain.exponentialRampToValueAtTime(0.55, now + 0.08);
+        g.gain.exponentialRampToValueAtTime(0.001, now + 0.55);
+        o.connect(f); f.connect(g); g.connect(master);
+        o.start(now); o.stop(now + 0.58);
+      } else if (kind === 'blip'){
+        beep(520, 0, 0.18, 'sine', 0.7);
+        beep(780, 0.08, 0.16, 'sine', 0.45);
+      } else if (kind === 'chime'){
+        beep(523.25, 0, 0.35, 'sine', 0.55);
+        beep(659.25, 0.12, 0.4, 'sine', 0.45);
+        beep(783.99, 0.24, 0.5, 'triangle', 0.35);
+      } else if (kind === 'soft'){
+        beep(392, 0, 0.4, 'sine', 0.4);
+      } else if (kind === 'resolve'){
+        beep(392, 0, 0.35, 'sine', 0.45);
+        beep(523.25, 0.15, 0.4, 'sine', 0.5);
+        beep(659.25, 0.32, 0.55, 'triangle', 0.4);
+      } else if (kind === 'rest'){
+        beep(246.94, 0, 0.5, 'sine', 0.25);
+      }
+    } catch (_) { /* autoplay / unsupported */ }
+  }
+
+  function setStroke(el, color){ el.setAttribute('stroke', color); }
+
+  function lightTool(i, on, color){
+    const g = $('tool' + i);
+    if (!g) return;
+    const box = g.querySelector('.tBox');
+    const dotEl = g.querySelector('.tDot');
+    if (box) setStroke(box, on ? color : LINE);
+    if (dotEl) dotEl.setAttribute('fill', on ? color : LINE);
+  }
+
+  function render(){
+    let acc = 0, ph = P[0], idx = 0, local = 0;
+    for (let i = 0; i < P.length; i++){
+      if (t < acc + P[i].d || i === P.length - 1){
+        ph = P[i]; idx = i; local = clamp((t - acc) / ph.d); break;
+      }
+      acc += P[i].d;
+    }
+    const lt = local * ph.d;
+    const reached = k => idx > at(k) || ph.k === k;
+
+    let tp = ph;
+    for (let i = idx; i >= 0 && !tp.txt; i--) tp = P[i];
+    stepN.textContent = ph.step;
+    if (stepText.innerHTML !== tp.txt) stepText.innerHTML = tp.txt;
+    rail.forEach((r, i) => {
+      r.className = i < ph.step ? 'on' + (ph.k === 'done' ? ' done' : '') : '';
+    });
+
+    const toneKey = ph.k + ':' + Math.floor(acc);
+    if (ph.tone && toneKey !== lastToneKey && local < 0.08){
+      lastToneKey = ph.k + ':' + idx;
+      tone(ph.tone);
+    }
+
+    const drift = reduce ? 0 : 1;
+    floaters.forEach(f => {
+      const y = Math.sin(t * f.speed + f.phase) * f.amp * drift;
+      const x = Math.cos(t * f.speed * 0.7 + f.phase) * (f.amp * 0.35) * drift;
+      $(f.id).setAttribute('transform', `translate(${x.toFixed(2)} ${y.toFixed(2)})`);
+    });
+
+    // Browser typing
+    const typed = idx > at('type') ? 1 : (ph.k === 'type' ? local : 0);
+    const msg = 'tickets for Alice';
+    $('userBubble').textContent = msg.slice(0, Math.max(1, Math.round(typed * msg.length)));
+    const clientHot = ['type','toApi','toClient','done','discover'].includes(ph.k);
+    setStroke($('clientFrame'), ph.k === 'done' ? OK : (clientHot ? REQ : LINE));
+
+    // Sidebar tools after discovery
+    const sideOn = reached('discover');
+    $('sideTools').setAttribute('opacity', sideOn ? 1 : 0.5);
+    setStroke($('sideTools'), sideOn ? TOOL : LINE);
+    $('sideT0').textContent = sideOn ? '· get_ticket' : '· …';
+    $('sideT1').textContent = sideOn ? '· get_users' : '· …';
+    $('sideT2').textContent = sideOn ? '· create_ticket' : '· …';
+    $('sideT3').textContent = sideOn ? 'loaded from MCP' : 'GET /api/tools';
+    ['sideT0','sideT1','sideT2','sideT3'].forEach(id => {
+      $(id).setAttribute('fill', sideOn ? (id === 'sideT3' ? '#8297ab' : '#e6edf3') : '#4d6276');
+    });
+    const usedOn = reached('toClient');
+    $('usedTools').textContent = usedOn ? 'used: get_ticket' : '';
+    $('usedTools').setAttribute('fill', usedOn ? OK : '#4d6276');
+
+    // Bot reply
+    const replyOn = reached('toClient');
+    $('botBubble').setAttribute('opacity', replyOn ? 1 : 0.45);
+    setStroke($('botBubble'), replyOn ? OK : LINE);
+    $('botLabel').setAttribute('fill', replyOn ? OK : '#4d6276');
+    $('botLine1').textContent = replyOn ? '3 tickets · Alice' : 'waiting…';
+    $('botLine1').setAttribute('fill', replyOn ? '#e6edf3' : '#4d6276');
+    $('botLine2').textContent = replyOn ? 'open · in_review' : '';
+    $('botLine2').setAttribute('fill', replyOn ? OK : '#4d6276');
+
+    // API
+    const apiBusy = ['boot','toApi','toAgent','toClient','discover'].includes(ph.k);
+    apiLeds.forEach((l, i) => l.setAttribute('fill', apiBusy && Math.floor(t * 8 + i) % 3 === 0 ? REQ : LINE));
+    setStroke($('apiFrame'), apiBusy ? REQ : (reached('boot') ? '#1f4a66' : LINE));
+    setStroke($('routeCard'), reached('toApi') ? REQ : LINE);
+    $('routeText').setAttribute('fill', reached('toApi') ? REQ : '#e6edf3');
+    $('routeText').textContent = ph.k === 'discover' || (reached('discover') && !reached('toApi'))
+      ? 'GET /api/tools' : 'POST /api/chat';
+    const toolsApiOn = reached('discover');
+    $('toolsApiCard').setAttribute('opacity', toolsApiOn ? 1 : 0.5);
+    setStroke($('toolsApiCard'), toolsApiOn ? TOOL : LINE);
+    $('toolsApiText').textContent = toolsApiOn ? 'tools loaded' : '/api/tools';
+    $('toolsApiText').setAttribute('fill', toolsApiOn ? TOOL : '#4d6276');
+    setStroke($('portCard'), reached('boot') ? RES : LINE);
+
+    // Agent
+    const agentBusy = ['boot','toMcpList','discover','toAgent','think','toMcp','fromBackend','reply'].includes(ph.k);
+    agentLeds.forEach((l, i) => l.setAttribute('fill', agentBusy && Math.floor(t * 9 + i * 1.3) % 3 === 0 ? OK : LINE));
+    setStroke($('agentFrame'), agentBusy ? OK : (reached('boot') ? '#1f6b4d' : LINE));
+    setStroke($('thinkCard'), agentBusy ? OK : LINE);
+    const thinkLabels = {
+      boot: 'initAgent()',
+      toMcpList: 'connecting MCP…',
+      discover: 'tools bound',
+      toAgent: 'waking up',
+      think: 'choosing tools…',
+      toMcp: 'calling get_ticket',
+      toBackend: 'waiting on MCP',
+      fromBackend: 'reading results',
+      reply: 'writing answer',
+    };
+    $('thinkText').textContent = thinkLabels[ph.k] || (reached('reply') ? 'done' : (reached('boot') ? 'ready' : 'idle'));
+    $('thinkText').setAttribute('fill', agentBusy || reached('reply') ? OK : '#e6edf3');
+    $('thinkSub').textContent = reached('toAgent') ? 'OpenRouter · loop' : 'OpenRouter model';
+
+    const clientCardOn = reached('toMcpList');
+    $('mcpClientCard').setAttribute('opacity', clientCardOn ? 1 : 0.5);
+    setStroke($('mcpClientCard'), clientCardOn ? TOOL : LINE);
+    $('mcpClientText').textContent = reached('discover') ? 'connected · tickets' : (reached('toMcpList') ? 'HTTP → :3300' : 'not connected');
+    $('mcpClientText').setAttribute('fill', clientCardOn ? '#e6edf3' : '#4d6276');
+    $('mcpClientSub').textContent = reached('discover') ? 'getTools() ✓' : 'getTools()';
+    $('mcpClientSub').setAttribute('fill', reached('discover') ? OK : '#4d6276');
+
+    const planOn = reached('reply');
+    $('planCard').setAttribute('opacity', planOn ? 1 : 0.45);
+    setStroke($('planCard'), planOn ? OK : LINE);
+    $('planText').setAttribute('fill', planOn ? OK : '#4d6276');
+
+    // MCP
+    const mcpBusy = ['toMcpList','discover','toMcp','toBackend','fromBackend'].includes(ph.k);
+    mcpLeds.forEach((l, i) => l.setAttribute('fill', mcpBusy && Math.floor(t * 8 + i) % 3 === 0 ? TOOL : LINE));
+    setStroke($('mcpFrame'), ph.k === 'done' ? OK : (mcpBusy || reached('toMcpList') ? TOOL : LINE));
+    setStroke($('mcpUrlCard'), reached('toMcpList') ? TOOL : LINE);
+    $('mcpUrlText').setAttribute('fill', reached('toMcpList') ? TOOL : '#e6edf3');
+
+    const listPhase = reached('discover');
+    lightTool(0, listPhase || ph.k === 'toMcpList' || ph.k === 'toMcp', TOOL);
+    lightTool(1, listPhase && ph.k !== 'toMcp', TOOL);
+    lightTool(2, listPhase && ph.k !== 'toMcp', TOOL);
+    if (ph.k === 'toMcp' || reached('fromBackend')) {
+      lightTool(0, true, ph.k === 'toMcp' || ph.k === 'toBackend' ? RES : OK);
+      lightTool(1, false, LINE);
+      lightTool(2, false, LINE);
+    }
+    $('tool3').setAttribute('opacity', listPhase ? 1 : 0.55);
+
+    // Backend
+    const beBusy = ['toBackend','fromBackend'].includes(ph.k);
+    beLeds.forEach((l, i) => l.setAttribute('fill', beBusy && Math.floor(t * 7 + i) % 3 === 0 ? SSE : LINE));
+    setStroke($('backendFrame'), ph.k === 'done' ? OK : (beBusy ? SSE : (reached('toBackend') ? '#1f5a52' : LINE)));
+    setStroke($('beRoute'), beBusy || reached('toBackend') ? SSE : LINE);
+    $('beRouteText').textContent = beBusy ? 'GET /tickets?assignee' : ':4000 /tickets';
+    $('beRouteText').setAttribute('fill', beBusy || reached('toBackend') ? SSE : '#e6edf3');
+    $('beData').setAttribute('opacity', reached('toBackend') ? 1 : 0.5);
+    setStroke($('beData'), reached('fromBackend') ? OK : (reached('toBackend') ? SSE : LINE));
+    $('beLine1').textContent = reached('fromBackend') ? 'Alice · 3 tickets' : 'users · projects';
+    $('beLine2').textContent = reached('fromBackend') ? 'open · in_review' : 'sprints · tickets';
+    $('beLine3').textContent = reached('fromBackend') ? 'JSON → MCP' : '';
+    $('beLine1').setAttribute('fill', reached('fromBackend') ? '#e6edf3' : '#4d6276');
+    $('beLine2').setAttribute('fill', reached('fromBackend') ? OK : '#4d6276');
+    $('beLine3').setAttribute('fill', reached('fromBackend') ? OK : '#4d6276');
+
+    // Packet
+    if (ph.from){
+      const e = ease(local);
+      const x = lerp(ph.from[0], ph.to[0], e);
+      const y = lerp(ph.from[1], ph.to[1], e);
+      packet.setAttribute('opacity', Math.min(1, local * 5, (1 - local) * 5 + 0.25));
+      packet.setAttribute('transform', `translate(${x} ${y})`);
+      const w = Math.min(280, ph.label.length * 7.2 + 32);
+      pill.setAttribute('x', -w / 2);
+      pill.setAttribute('width', w);
+      pill.setAttribute('stroke', ph.c);
+      pillText.textContent = ph.label;
+      pillText.setAttribute('fill', ph.c);
+      dot.setAttribute('fill', ph.c);
+    } else {
+      packet.setAttribute('opacity', 0);
+    }
+
+    // Toast
+    if (ph.k === 'done'){
+      const s = clamp(lt / 0.5), out = clamp((lt - (ph.d - 0.6)) / 0.45);
+      const label = 'Discover → chat · tools live';
+      toastText.textContent = label;
+      const w = label.length * 8.2 + 70;
+      $('toastBg').setAttribute('x', -w / 2);
+      $('toastBg').setAttribute('width', w);
+      toastInner.querySelector('circle').setAttribute('cx', -w / 2 + 26);
+      toastInner.querySelector('path').setAttribute('d', `M${-w / 2 + 21} 0l4 4 8-9`);
+      toastText.setAttribute('x', 14);
+      toast.setAttribute('opacity', s * (1 - out));
+      toastInner.setAttribute('transform', `translate(0 ${(1 - s) * 16 - out * 10}) scale(${Math.max(back(s) * (1 - out * 0.15), 0.01)})`);
+      setStroke($('clientFrame'), OK);
+      setStroke($('apiFrame'), OK);
+      setStroke($('agentFrame'), OK);
+      setStroke($('mcpFrame'), OK);
+      setStroke($('backendFrame'), OK);
+    } else {
+      toast.setAttribute('opacity', 0);
+    }
+  }
+
+  function frame(ts){
+    if (last == null) last = ts;
+    const dt = Math.min(0.1, (ts - last) / 1000);
+    last = ts;
+    if (playing){
+      t += dt * speed;
+      if (t >= total){ t = 0; lastToneKey = null; }
+    }
+    render();
+    requestAnimationFrame(frame);
+  }
+
+  const playBtn = $('play');
+  const sync = () => { playBtn.textContent = playing ? 'Pause' : 'Play'; };
+  playBtn.addEventListener('click', () => {
+    playing = !playing;
+    if (playing && soundOn) ensureAudio();
+    sync();
+  });
+  $('replay').addEventListener('click', () => {
+    t = 0; lastToneKey = null; playing = true;
+    if (soundOn) ensureAudio();
+    sync();
+  });
+  document.querySelectorAll('.speed button').forEach(b => b.addEventListener('click', () => {
+    speed = +b.dataset.s;
+    document.querySelectorAll('.speed button').forEach(x => x.setAttribute('aria-pressed', x === b));
+  }));
+
+  const soundBtn = $('soundBtn');
+  soundBtn.addEventListener('click', () => {
+    soundOn = !soundOn;
+    soundBtn.textContent = soundOn ? 'On' : 'Off';
+    soundBtn.setAttribute('aria-pressed', soundOn);
+    if (soundOn){ ensureAudio(); tone('soft'); }
+  });
+
+  const unlock = () => { if (soundOn) ensureAudio(); window.removeEventListener('pointerdown', unlock); };
+  window.addEventListener('pointerdown', unlock);
+
+  const jump = new URLSearchParams(location.search).get('at');
+  if (jump && at(jump) >= 0){
+    const i = at(jump);
+    t = P.slice(0, i).reduce((a, p) => a + p.d, 0) + P[i].d * 0.55;
+    playing = false;
+  } else if (reduce){
+    t = total - 1.4;
+    playing = false;
+  }
+  sync();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

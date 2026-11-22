@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lab 10 — products store · REST + MCP · shared handler</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  --ground:#0f1720;
+  --panel:#16212d;
+  --line:#2a3a4b;
+  --ink:#e6edf3;
+  --muted:#8297ab;
+  --dim:#4d6276;
+  --req:#5cc8ff;
+  --res:#ffb547;
+  --ok:#3ddc97;
+  --tool:#b18cff;
+  --sse:#5eead4;
+  --display:"Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
+  --mono:"IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  color-scheme:dark;
+}
+html,body{background:var(--ground);color:var(--ink)}
+body{
+  font-family:var(--mono);
+  margin:0;
+  padding:28px max(16px,env(safe-area-inset-right)) 48px max(16px,env(safe-area-inset-left));
+  background-image:
+    radial-gradient(ellipse 70% 45% at 8% -8%, rgba(92,200,255,.07), transparent 55%),
+    radial-gradient(ellipse 50% 35% at 92% 0%, rgba(177,140,255,.05), transparent 50%);
+}
+.wrap{max-width:1120px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+header{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:8px 24px}
+h1{font-family:var(--display);font-weight:700;font-size:clamp(1.5rem,3.2vw,2.15rem);margin:0;letter-spacing:-.01em;text-wrap:balance}
+h1 em{font-style:normal;color:var(--req)}
+.meta{color:var(--muted);font-size:.78rem;letter-spacing:.07em;text-transform:uppercase}
+.lede{margin:-4px 0 0;color:var(--muted);font-size:.92rem;line-height:1.55;max-width:78ch}
+.lede code{color:var(--req)}
+
+.stage{
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:16px;
+  overflow:hidden;
+  position:relative;
+}
+.stage svg{display:block;width:100%;height:auto}
+svg text{font-family:var(--mono)}
+
+.caption{display:grid;grid-template-columns:auto 1fr;gap:14px;align-items:center;min-height:3.6em}
+.caption .n{font-family:var(--display);font-size:2rem;font-weight:700;color:var(--muted);font-variant-numeric:tabular-nums;width:2.2ch}
+.caption p{margin:0;font-size:.95rem;line-height:1.5}
+.caption code{color:var(--req)}
+.caption code.r{color:var(--res)}
+.caption code.t{color:var(--tool)}
+.caption code.o{color:var(--ok)}
+.caption code.s{color:var(--sse)}
+
+.rail{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+.rail div{height:4px;border-radius:2px;background:var(--line);transition:background .35s}
+.rail div.on{background:var(--req)}
+.rail div.on.done{background:var(--ok)}
+
+.controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+button{
+  font:500 .85rem var(--mono);
+  color:var(--ink);
+  background:transparent;
+  border:1px solid var(--line);
+  border-radius:8px;
+  padding:9px 16px;
+  cursor:pointer;
+  letter-spacing:.03em;
+}
+button:hover{border-color:var(--muted)}
+button:focus-visible{outline:2px solid var(--req);outline-offset:2px}
+button.primary{background:var(--ink);color:var(--ground);border-color:var(--ink)}
+.speed{margin-left:auto;display:flex;gap:4px;align-items:center;color:var(--muted);font-size:.8rem}
+.speed button{padding:6px 10px}
+.speed button[aria-pressed="true"]{border-color:var(--req);color:var(--req)}
+.sound{display:flex;gap:4px;align-items:center;color:var(--muted);font-size:.8rem}
+.sound button[aria-pressed="true"]{border-color:var(--ok);color:var(--ok)}
+@media (max-width:560px){.speed,.sound{margin-left:0}}
+
+.anatomy{border-top:1px solid var(--line);padding-top:22px;display:flex;flex-direction:column;gap:16px}
+.anatomy h2{margin:0;font-family:var(--display);font-weight:500;font-size:1.15rem}
+.flow{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.flow svg{display:block;width:100%;height:auto}
+.pipe-flow{stroke-dasharray:5 7;animation:flow 1.4s linear infinite}
+@keyframes flow{to{stroke-dashoffset:-24}}
+@media (prefers-reduced-motion:reduce){.pipe-flow{animation:none}}
+.notes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;font-size:.82rem;line-height:1.55;color:var(--muted)}
+.notes strong{display:block;color:var(--ink);font-weight:500;margin-bottom:4px}
+.notes code{color:var(--req)}
+@media (max-width:760px){.notes{grid-template-columns:1fr}}
+
+.paths{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.path{
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:12px;
+  padding:14px 16px;
+  font-size:.82rem;
+  line-height:1.5;
+  color:var(--muted);
+}
+.path strong{display:block;font-family:var(--display);font-size:1rem;font-weight:600;margin-bottom:6px}
+.path.rest strong{color:var(--req)}
+.path.mcp strong{color:var(--tool)}
+.path code{color:var(--ink)}
+@media (max-width:760px){.paths{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Lab 10 — <em>products</em> store · REST + MCP</h1>
+    <span class="meta">react :5111 · express :3011 · mcp :3110</span>
+  </header>
+  <p class="lede">Two doors into the same catalog. The table calls <code>GET /api/products</code>. Chat wakes a LangChain agent that calls the MCP <code>getProducts</code> tool. Both paths land on <code>getProductsHandler</code> — one filter function, dual exposure.</p>
+
+  <div class="stage">
+  <svg viewBox="0 0 1080 540" role="img" aria-label="Animation of dual product paths: REST table and MCP chat agent sharing getProductsHandler">
+    <defs>
+      <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+        <feGaussianBlur stdDeviation="7" result="b"/>
+        <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+      <pattern id="grid" width="28" height="28" patternUnits="userSpaceOnUse">
+        <path d="M28 0H0V28" fill="none" stroke="#1a2735" stroke-width="1"/>
+      </pattern>
+      <marker id="arrowReq" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0 0 L10 5 L0 10 z" fill="#5cc8ff"/>
+      </marker>
+      <marker id="arrowOk" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0 0 L10 5 L0 10 z" fill="#3ddc97"/>
+      </marker>
+      <marker id="arrowTool" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0 0 L10 5 L0 10 z" fill="#b18cff"/>
+      </marker>
+    </defs>
+    <rect width="1080" height="540" fill="url(#grid)"/>
+
+    <!-- soft lanes -->
+    <g fill="none" stroke-width="2" stroke-dasharray="5 8" opacity=".28">
+      <path id="laneRest" d="M250 128 H290"/>
+      <path id="laneChat" d="M250 250 H290"/>
+      <path id="laneMcp" d="M530 250 H570"/>
+      <path id="laneBack" d="M290 340 H250"/>
+    </g>
+
+    <!-- CLIENT :5111 -->
+    <g id="client" transform="translate(0 0)">
+      <rect id="clientFrame" x="28" y="36" width="222" height="380" rx="16" fill="#0f1720" stroke="#2a3a4b" stroke-width="2"/>
+      <path d="M28 50a16 16 0 0 1 16-14h190a16 16 0 0 1 16 14v20H28z" fill="#1d2a38"/>
+      <circle cx="48" cy="46" r="4" fill="#ff6b6b"/><circle cx="62" cy="46" r="4" fill="#ffb547"/><circle cx="76" cy="46" r="4" fill="#3ddc97"/>
+      <text x="94" y="50" fill="#8297ab" font-size="11">react · :5111</text>
+
+      <rect id="tableCard" x="46" y="96" width="186" height="88" rx="12" fill="#16212d" stroke="#2a3a4b"/>
+      <text x="60" y="118" fill="#8297ab" font-size="10">PRODUCTS TABLE</text>
+      <text id="tableFilter" x="60" y="140" fill="#e6edf3" font-size="12">filters idle</text>
+      <text id="tableResult" x="60" y="162" fill="#4d6276" font-size="11">waiting…</text>
+
+      <rect id="chatCard" x="46" y="204" width="186" height="120" rx="12" fill="#121c28" stroke="#2a3a4b" opacity=".55"/>
+      <text x="60" y="226" fill="#4d6276" font-size="10">AI CHAT</text>
+      <text id="userBubble" x="60" y="250" fill="#4d6276" font-size="12">…</text>
+      <text id="botLine1" x="60" y="278" fill="#4d6276" font-size="11">assistant idle</text>
+      <text id="botLine2" x="60" y="298" fill="#4d6276" font-size="11"></text>
+
+      <text x="139" y="360" fill="#8297ab" font-size="12" text-anchor="middle" letter-spacing="2">CLIENT</text>
+      <text x="139" y="378" fill="#4d6276" font-size="10" text-anchor="middle">table · chatbot</text>
+    </g>
+
+    <!-- EXPRESS :3011 -->
+    <g id="api" transform="translate(0 0)">
+      <rect id="apiFrame" x="290" y="36" width="240" height="380" rx="16" fill="#0f1720" stroke="#2a3a4b" stroke-width="2"/>
+      <path d="M290 50a16 16 0 0 1 16-14h208a16 16 0 0 1 16 14v20H290z" fill="#1d2a38"/>
+      <circle class="apiLed" cx="310" cy="46" r="4" fill="#2a3a4b"/><circle class="apiLed" cx="324" cy="46" r="4" fill="#2a3a4b"/>
+      <text x="340" y="50" fill="#8297ab" font-size="11">express · :3011</text>
+
+      <rect id="restCard" x="308" y="96" width="204" height="78" rx="12" fill="#16212d" stroke="#2a3a4b"/>
+      <text x="322" y="118" fill="#8297ab" font-size="10">REST</text>
+      <text id="restText" x="322" y="140" fill="#e6edf3" font-size="13" font-weight="600">GET /api/products</text>
+      <text id="restSub" x="322" y="158" fill="#4d6276" font-size="10">name · type · price</text>
+
+      <rect id="agentCard" x="308" y="192" width="204" height="100" rx="12" fill="#121c28" stroke="#2a3a4b" opacity=".55"/>
+      <text x="322" y="214" fill="#4d6276" font-size="10">AGENT ROUTE</text>
+      <text id="agentText" x="322" y="238" fill="#4d6276" font-size="13" font-weight="600">POST /api/agent/chat</text>
+      <text id="agentSub" x="322" y="260" fill="#4d6276" font-size="11">connectProductsMcp()</text>
+      <text id="agentState" x="322" y="278" fill="#4d6276" font-size="10">idle</text>
+
+      <rect id="localHandlerHint" x="308" y="312" width="204" height="44" rx="10" fill="#121c28" stroke="#2a3a4b" opacity=".45"/>
+      <text x="322" y="330" fill="#4d6276" font-size="10">REST → local handler</text>
+      <text id="localHintText" x="322" y="348" fill="#4d6276" font-size="11">server/data/products.js</text>
+
+      <text x="410" y="390" fill="#8297ab" font-size="12" text-anchor="middle" letter-spacing="2">API</text>
+      <text x="410" y="406" fill="#4d6276" font-size="10" text-anchor="middle">REST + agent door</text>
+    </g>
+
+    <!-- MCP :3110 -->
+    <g id="mcp" transform="translate(0 0)">
+      <rect id="mcpFrame" x="570" y="36" width="240" height="380" rx="16" fill="#0f1720" stroke="#2a3a4b" stroke-width="2"/>
+      <path d="M570 50a16 16 0 0 1 16-14h208a16 16 0 0 1 16 14v20H570z" fill="#1d2a38"/>
+      <circle class="mcpLed" cx="590" cy="46" r="4" fill="#2a3a4b"/><circle class="mcpLed" cx="604" cy="46" r="4" fill="#2a3a4b"/>
+      <text x="620" y="50" fill="#8297ab" font-size="11">products mcp · :3110</text>
+
+      <rect id="httpCard" x="588" y="96" width="204" height="64" rx="12" fill="#16212d" stroke="#2a3a4b"/>
+      <text x="602" y="118" fill="#8297ab" font-size="10">STREAMABLE HTTP</text>
+      <text id="httpText" x="602" y="140" fill="#e6edf3" font-size="12">/mcp · POST tools/call</text>
+
+      <rect id="toolCard" x="588" y="180" width="204" height="96" rx="12" fill="#121c28" stroke="#2a3a4b" opacity=".55"/>
+      <text x="602" y="202" fill="#4d6276" font-size="10">TOOL</text>
+      <text id="toolName" x="602" y="228" fill="#4d6276" font-size="15" font-weight="600">getProducts</text>
+      <text id="toolArgs" x="602" y="250" fill="#4d6276" font-size="11">filters…</text>
+      <text id="toolOut" x="602" y="268" fill="#4d6276" font-size="10">structuredContent</text>
+
+      <rect id="mcpHandlerHint" x="588" y="296" width="204" height="60" rx="10" fill="#121c28" stroke="#2a3a4b" opacity=".45"/>
+      <text x="602" y="318" fill="#4d6276" font-size="10">MCP → same handler</text>
+      <text id="mcpHintText" x="602" y="338" fill="#4d6276" font-size="11">mcp-server/data/…</text>
+
+      <text x="690" y="390" fill="#8297ab" font-size="12" text-anchor="middle" letter-spacing="2">MCP</text>
+      <text x="690" y="406" fill="#4d6276" font-size="10" text-anchor="middle">AI-accessible tool</text>
+    </g>
+
+    <!-- SHARED HANDLER — visual punchline -->
+    <g id="handler" transform="translate(0 0)">
+      <rect id="handlerFrame" x="830" y="36" width="222" height="380" rx="16" fill="#0f1720" stroke="#2a3a4b" stroke-width="2"/>
+      <path d="M830 50a16 16 0 0 1 16-14h190a16 16 0 0 1 16 14v20H830z" fill="#1d2a38"/>
+      <text x="850" y="50" fill="#8297ab" font-size="11">shared logic</text>
+
+      <rect id="handlerCore" x="848" y="110" width="186" height="160" rx="14" fill="#121c28" stroke="#2a3a4b"/>
+      <text x="941" y="140" fill="#8297ab" font-size="10" text-anchor="middle">SINGLE FUNCTION</text>
+      <text id="handlerTitle" x="941" y="172" fill="#e6edf3" font-size="13" font-weight="600" text-anchor="middle">getProductsHandler</text>
+      <text id="handlerArgs" x="941" y="198" fill="#4d6276" font-size="11" text-anchor="middle">{ name, type,</text>
+      <text id="handlerArgs2" x="941" y="216" fill="#4d6276" font-size="11" text-anchor="middle">minPrice, maxPrice }</text>
+      <text id="handlerOut" x="941" y="248" fill="#4d6276" font-size="11" text-anchor="middle">{ products, total }</text>
+
+      <g id="dualBadge" opacity=".4">
+        <rect id="badgeRest" x="848" y="292" width="88" height="36" rx="10" fill="#16212d" stroke="#2a3a4b"/>
+        <text id="badgeRestTxt" x="892" y="314" fill="#4d6276" font-size="11" text-anchor="middle">REST</text>
+        <rect id="badgeMcp" x="946" y="292" width="88" height="36" rx="10" fill="#16212d" stroke="#2a3a4b"/>
+        <text id="badgeMcpTxt" x="990" y="314" fill="#4d6276" font-size="11" text-anchor="middle">MCP</text>
+      </g>
+
+      <text x="941" y="360" fill="#8297ab" font-size="12" text-anchor="middle" letter-spacing="1">HANDLER</text>
+      <text x="941" y="378" fill="#4d6276" font-size="10" text-anchor="middle">dual exposure</text>
+    </g>
+
+    <!-- wire labels between columns -->
+    <g id="wires" opacity=".7">
+      <path id="wireRest" d="M250 128 H290" fill="none" stroke="#2a3a4b" stroke-width="2" stroke-dasharray="5 7" marker-end="url(#arrowReq)" opacity=".5"/>
+      <path id="wireChat" d="M250 250 H290" fill="none" stroke="#2a3a4b" stroke-width="2" stroke-dasharray="5 7" marker-end="url(#arrowReq)" opacity=".5"/>
+      <path id="wireAgentMcp" d="M530 250 H570" fill="none" stroke="#2a3a4b" stroke-width="2" stroke-dasharray="5 7" marker-end="url(#arrowTool)" opacity=".5"/>
+      <path id="wireToHandlerRest" d="M530 350 H830 350" fill="none" stroke="#2a3a4b" stroke-width="2" stroke-dasharray="5 7" opacity=".35"/>
+      <path id="wireToHandlerMcp" d="M810 250 H830 190" fill="none" stroke="#2a3a4b" stroke-width="2" stroke-dasharray="5 7" opacity=".35"/>
+      <text id="wireRestLbl" x="270" y="118" fill="#4d6276" font-size="10" text-anchor="middle">REST</text>
+      <text id="wireChatLbl" x="270" y="240" fill="#4d6276" font-size="10" text-anchor="middle">chat</text>
+      <text id="wireMcpLbl" x="550" y="240" fill="#4d6276" font-size="10" text-anchor="middle">MCP</text>
+    </g>
+
+    <g id="packet" opacity="0">
+      <rect id="pill" x="-90" y="-42" width="180" height="26" rx="13" fill="#16212d" stroke="#5cc8ff" stroke-width="1.6"/>
+      <text id="pillText" x="0" y="-24" fill="#5cc8ff" font-size="11" font-weight="500" text-anchor="middle"></text>
+      <circle id="dot" r="8" fill="#5cc8ff" filter="url(#glow)"/>
+    </g>
+
+    <g id="toast" opacity="0" transform="translate(540 52)">
+      <g id="toastInner">
+        <rect id="toastBg" x="-130" y="-22" width="260" height="44" rx="22" fill="#3ddc97" filter="url(#glow)"/>
+        <circle cx="-104" cy="0" r="12" fill="#0f1720"/>
+        <path d="M-109 0l4 4 8-9" fill="none" stroke="#3ddc97" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+        <text id="toastText" x="10" y="5" fill="#0f1720" font-size="14" font-weight="600" text-anchor="middle">Shared handler</text>
+      </g>
+    </g>
+  </svg>
+  </div>
+
+  <div class="caption" aria-live="polite">
+    <span class="n" id="stepN">0</span>
+    <p id="stepText">Two paths into one catalog. REST for the table, MCP for the chat agent…</p>
+  </div>
+  <div class="rail" id="rail"><div></div><div></div><div></div><div></div><div></div><div></div><div></div></div>
+
+  <div class="controls">
+    <button class="primary" id="play" type="button">Pause</button>
+    <button id="replay" type="button">Replay</button>
+    <div class="sound" role="group" aria-label="Sound">
+      Sound
+      <button type="button" id="soundBtn" aria-pressed="true">On</button>
+    </div>
+    <div class="speed" role="group" aria-label="Speed">Speed
+      <button type="button" data-s="0.5" aria-pressed="false">0.5×</button>
+      <button type="button" data-s="1" aria-pressed="true">1×</button>
+      <button type="button" data-s="1.5" aria-pressed="false">1.5×</button>
+    </div>
+  </div>
+
+  <section class="anatomy" aria-label="Dual exposure of getProductsHandler">
+    <h2>Same handler, two exposures</h2>
+    <div class="paths">
+      <div class="path rest">
+        <strong>REST path · UI table</strong>
+        React filters → <code>GET /api/products</code> on <code>:3011</code> → Express calls <code>getProductsHandler</code> in-process → JSON for the catalog table.
+      </div>
+      <div class="path mcp">
+        <strong>MCP path · chat agent</strong>
+        Chat → <code>POST /api/agent/chat</code> → LangChain + <code>connectProductsMcp()</code> → <code>tools/call getProducts</code> on <code>:3110/mcp</code> → same handler logic → agent reply.
+      </div>
+    </div>
+  </section>
+
+  <section class="anatomy" aria-label="Static overview of lab 10 dual path">
+    <h2>The same hop, at a glance</h2>
+    <div class="flow">
+      <svg viewBox="0 0 1080 200" role="img" aria-label="Client table uses REST, chat uses agent via MCP, both hit getProductsHandler">
+        <rect width="1080" height="200" fill="#16212d"/>
+
+        <g>
+          <rect x="28" y="24" width="160" height="70" rx="12" fill="#0f1720" stroke="#5cc8ff" stroke-width="1.5"/>
+          <text x="108" y="54" fill="#5cc8ff" font-size="14" text-anchor="middle" font-weight="600">Client</text>
+          <text x="108" y="74" fill="#8297ab" font-size="11" text-anchor="middle">:5111 table · chat</text>
+        </g>
+        <g>
+          <rect x="248" y="24" width="170" height="70" rx="12" fill="#0f1720" stroke="#ffb547" stroke-width="1.5"/>
+          <text x="333" y="54" fill="#ffb547" font-size="14" text-anchor="middle" font-weight="600">Express</text>
+          <text x="333" y="74" fill="#8297ab" font-size="11" text-anchor="middle">:3011 REST + agent</text>
+        </g>
+        <g>
+          <rect x="478" y="24" width="170" height="70" rx="12" fill="#0f1720" stroke="#b18cff" stroke-width="1.5"/>
+          <text x="563" y="54" fill="#b18cff" font-size="14" text-anchor="middle" font-weight="600">Products MCP</text>
+          <text x="563" y="74" fill="#8297ab" font-size="11" text-anchor="middle">:3110 getProducts</text>
+        </g>
+        <g>
+          <rect x="708" y="24" width="340" height="70" rx="12" fill="#0f1720" stroke="#3ddc97" stroke-width="1.5"/>
+          <text x="878" y="54" fill="#3ddc97" font-size="14" text-anchor="middle" font-weight="600">getProductsHandler</text>
+          <text x="878" y="74" fill="#8297ab" font-size="11" text-anchor="middle">shared filter · dual exposure</text>
+        </g>
+
+        <!-- REST top pipe -->
+        <path class="pipe-flow" d="M188 42 H248" fill="none" stroke="#5cc8ff" stroke-width="1.6"/>
+        <path d="M240 36 l8 6 l-8 6" fill="none" stroke="#5cc8ff" stroke-width="1.6"/>
+        <text x="218" y="34" fill="#5cc8ff" font-size="10" text-anchor="middle">GET</text>
+
+        <path class="pipe-flow" d="M418 42 H708" fill="none" stroke="#5cc8ff" stroke-width="1.5" opacity=".85"/>
+        <path d="M700 36 l8 6 l-8 6" fill="none" stroke="#5cc8ff" stroke-width="1.5"/>
+        <text x="560" y="34" fill="#5cc8ff" font-size="10" text-anchor="middle">REST → handler</text>
+
+        <!-- MCP bottom pipe -->
+        <path class="pipe-flow" d="M188 82 H248" fill="none" stroke="#b18cff" stroke-width="1.6"/>
+        <path d="M240 76 l8 6 l-8 6" fill="none" stroke="#b18cff" stroke-width="1.6"/>
+        <text x="218" y="98" fill="#b18cff" font-size="10" text-anchor="middle">POST</text>
+
+        <path class="pipe-flow" d="M418 82 H478" fill="none" stroke="#b18cff" stroke-width="1.6"/>
+        <path d="M470 76 l8 6 l-8 6" fill="none" stroke="#b18cff" stroke-width="1.6"/>
+        <text x="448" y="98" fill="#b18cff" font-size="10" text-anchor="middle">MCP</text>
+
+        <path class="pipe-flow" d="M648 82 H708" fill="none" stroke="#b18cff" stroke-width="1.6"/>
+        <path d="M700 76 l8 6 l-8 6" fill="none" stroke="#b18cff" stroke-width="1.6"/>
+        <text x="678" y="98" fill="#b18cff" font-size="10" text-anchor="middle">tool</text>
+
+        <text x="108" y="130" fill="#4d6276" font-size="10" text-anchor="middle">ProductsTable · ChatBot</text>
+        <text x="333" y="130" fill="#4d6276" font-size="10" text-anchor="middle">index.js · products-agent</text>
+        <text x="563" y="130" fill="#4d6276" font-size="10" text-anchor="middle">create-products-server</text>
+        <text x="878" y="130" fill="#4d6276" font-size="10" text-anchor="middle">data/products.js (both sides)</text>
+
+        <rect x="28" y="148" width="1020" height="36" rx="10" fill="#0f1720" stroke="#2a3a4b"/>
+        <text x="538" y="171" fill="#8297ab" font-size="12" text-anchor="middle">Punchline: one filter function · REST for humans · MCP for the agent</text>
+      </svg>
+    </div>
+    <div class="notes">
+      <p><strong>Table stays on REST</strong>Filters hit <code>GET /api/products</code>. Express calls <code>getProductsHandler</code> directly — no MCP round-trip for the UI grid.</p>
+      <p><strong>Chat goes through MCP</strong>The agent never imports the catalog. It uses <code class="t">connectProductsMcp()</code> and calls the <code class="t">getProducts</code> tool over Streamable HTTP on <code>:3110</code>.</p>
+      <p><strong>Handler is the contract</strong>Both exposures accept the same filters and return <code class="o">{ products, total }</code>. Same business logic, two protocols.</p>
+    </div>
+  </section>
+</div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const REQ = '#5cc8ff', RES = '#ffb547', OK = '#3ddc97', TOOL = '#b18cff', SSE = '#5eead4', LINE = '#2a3a4b';
+
+  const packet = $('packet'), pill = $('pill'), pillText = $('pillText'), dot = $('dot');
+  const toast = $('toast'), toastInner = $('toastInner'), toastText = $('toastText');
+  const stepN = $('stepN'), stepText = $('stepText');
+  const rail = [...$('rail').children];
+  const apiLeds = [...document.querySelectorAll('.apiLed')];
+  const mcpLeds = [...document.querySelectorAll('.mcpLed')];
+
+  const floaters = [
+    { id: 'client', amp: 2.6, speed: 0.2, phase: 0.2 },
+    { id: 'api', amp: 2.2, speed: 0.17, phase: 1.3 },
+    { id: 'mcp', amp: 2.4, speed: 0.18, phase: 2.4 },
+    { id: 'handler', amp: 2.0, speed: 0.15, phase: 3.2 },
+  ];
+
+  const P = [
+    { k:'idle', d:1.2, step:0, txt:'Two paths into one catalog. <strong>REST</strong> for the table, <strong>MCP</strong> for the chat agent…', tone:'rest' },
+    { k:'restFilter', d:1.8, step:1, txt:'You filter the products table — e.g. type <code>Laptop</code>. The UI stays on plain HTTP.', tone:'soft' },
+    { k:'restToApi', d:1.9, step:2, from:[250,128], to:[320,128], label:'GET /api/products', c:REQ, txt:'Client → Express: <code>GET /api/products?type=Laptop</code> on <code>:3011</code>.', tone:'whoosh' },
+    { k:'restHandler', d:2.0, step:2, from:[500,350], to:[920,190], label:'getProductsHandler', c:REQ, txt:'REST path lands on <code>getProductsHandler</code> in-process — no MCP hop for the table.', tone:'chime' },
+    { k:'restBack', d:1.9, step:3, from:[308,140], to:[232,140], label:'{ products, total }', c:OK, txt:'JSON returns to the table. Catalog rows update from the same filter function the agent will use later.', tone:'whoosh' },
+    { k:'chatType', d:1.8, step:4, txt:'Now chat: <code>“Show me laptops under $2000”</code>. This path will use the agent + MCP tool.', tone:'soft' },
+    { k:'chatToApi', d:1.9, step:4, from:[250,250], to:[320,240], label:'POST /api/agent/chat', c:RES, txt:'Client → Express: <code class="r">POST /api/agent/chat</code> with <code>userMessage</code>.', tone:'whoosh' },
+    { k:'agentWake', d:1.8, step:5, txt:'LangChain agent wakes. It calls <code class="t">connectProductsMcp()</code> — Streamable HTTP client to <code>:3110/mcp</code>.', tone:'blip' },
+    { k:'mcpCall', d:2.0, step:5, from:[530,250], to:[620,230], label:'tools/call getProducts', c:TOOL, txt:'Agent → MCP: <code class="t">tools/call getProducts</code> with type + maxPrice filters.', tone:'whoosh' },
+    { k:'mcpHandler', d:2.1, step:6, from:[790,250], to:[920,190], label:'same handler', c:TOOL, txt:'MCP tool invokes the <strong>same</strong> <code>getProductsHandler</code> — dual exposure of one filter.', tone:'chime' },
+    { k:'mcpResult', d:1.9, step:6, from:[690,250], to:[450,250], label:'structuredContent', c:OK, txt:'Tool result flows back through MCP → agent. Reply includes products the UI can card-render.', tone:'whoosh' },
+    { k:'chatReply', d:1.9, step:7, from:[290,300], to:[140,280], label:'200 · reply', c:OK, txt:'Express returns <code class="o">{ reply, products, total }</code>. Chat shows the assistant answer + product cards.', tone:'whoosh' },
+    { k:'done', d:2.8, step:7, txt:'Round trip: <strong>REST + MCP share getProductsHandler</strong>. Humans get HTTP; the agent gets a tool — same catalog logic.', tone:'resolve' },
+  ];
+
+  const at = k => P.findIndex(p => p.k === k);
+  const total = P.reduce((a, p) => a + p.d, 0);
+  let t = 0, speed = 1, playing = true, last = null, soundOn = true;
+  let lastToneKey = null;
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  const ease = x => x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+  const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+  const back = x => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); };
+  const lerp = (a, b, u) => a + (b - a) * u;
+
+  let audioCtx = null;
+  function ensureAudio(){
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    return audioCtx;
+  }
+
+  function tone(kind){
+    if (!soundOn || reduce) return;
+    try {
+      const ctx = ensureAudio();
+      const now = ctx.currentTime;
+      const master = ctx.createGain();
+      master.gain.value = 0.07;
+      master.connect(ctx.destination);
+
+      const beep = (freq, start, dur, type = 'sine', gain = 1) => {
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.type = type;
+        o.frequency.setValueAtTime(freq, now + start);
+        g.gain.setValueAtTime(0, now + start);
+        g.gain.linearRampToValueAtTime(0.9 * gain, now + start + 0.03);
+        g.gain.exponentialRampToValueAtTime(0.001, now + start + dur);
+        o.connect(g); g.connect(master);
+        o.start(now + start); o.stop(now + start + dur + 0.02);
+      };
+
+      if (kind === 'whoosh'){
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        const f = ctx.createBiquadFilter();
+        o.type = 'triangle';
+        o.frequency.setValueAtTime(220, now);
+        o.frequency.exponentialRampToValueAtTime(640, now + 0.42);
+        f.type = 'lowpass';
+        f.frequency.setValueAtTime(900, now);
+        f.frequency.exponentialRampToValueAtTime(1800, now + 0.4);
+        g.gain.setValueAtTime(0.0001, now);
+        g.gain.exponentialRampToValueAtTime(0.55, now + 0.08);
+        g.gain.exponentialRampToValueAtTime(0.001, now + 0.55);
+        o.connect(f); f.connect(g); g.connect(master);
+        o.start(now); o.stop(now + 0.58);
+      } else if (kind === 'blip'){
+        beep(520, 0, 0.18, 'sine', 0.7);
+        beep(780, 0.08, 0.16, 'sine', 0.45);
+      } else if (kind === 'chime'){
+        beep(523.25, 0, 0.35, 'sine', 0.55);
+        beep(659.25, 0.12, 0.4, 'sine', 0.45);
+        beep(783.99, 0.24, 0.5, 'triangle', 0.35);
+      } else if (kind === 'soft'){
+        beep(392, 0, 0.4, 'sine', 0.4);
+      } else if (kind === 'resolve'){
+        beep(392, 0, 0.35, 'sine', 0.45);
+        beep(523.25, 0.15, 0.4, 'sine', 0.5);
+        beep(659.25, 0.32, 0.55, 'triangle', 0.4);
+      } else if (kind === 'rest'){
+        beep(246.94, 0, 0.5, 'sine', 0.25);
+      }
+    } catch (_) { /* autoplay / unsupported */ }
+  }
+
+  function setStroke(el, color){ if (el) el.setAttribute('stroke', color); }
+
+  function setWire(id, on, color){
+    const el = $(id);
+    if (!el) return;
+    el.setAttribute('stroke', on ? color : LINE);
+    el.setAttribute('opacity', on ? 1 : 0.5);
+  }
+
+  function render(){
+    let acc = 0, ph = P[0], idx = 0, local = 0;
+    for (let i = 0; i < P.length; i++){
+      if (t < acc + P[i].d || i === P.length - 1){
+        ph = P[i]; idx = i; local = clamp((t - acc) / ph.d); break;
+      }
+      acc += P[i].d;
+    }
+    const lt = local * ph.d;
+    const reached = k => idx > at(k) || ph.k === k;
+
+    let tp = ph;
+    for (let i = idx; i >= 0 && !tp.txt; i--) tp = P[i];
+    stepN.textContent = ph.step;
+    if (stepText.innerHTML !== tp.txt) stepText.innerHTML = tp.txt;
+    rail.forEach((r, i) => {
+      r.className = i < ph.step ? 'on' + (ph.k === 'done' ? ' done' : '') : '';
+    });
+
+    const toneKey = ph.k + ':' + Math.floor(acc);
+    if (ph.tone && toneKey !== lastToneKey && local < 0.08){
+      lastToneKey = ph.k + ':' + idx;
+      tone(ph.tone);
+    }
+
+    const drift = reduce ? 0 : 1;
+    floaters.forEach(f => {
+      const y = Math.sin(t * f.speed + f.phase) * f.amp * drift;
+      const x = Math.cos(t * f.speed * 0.7 + f.phase) * (f.amp * 0.35) * drift;
+      $(f.id).setAttribute('transform', `translate(${x.toFixed(2)} ${y.toFixed(2)})`);
+    });
+
+    // --- CLIENT ---
+    const restTyping = idx > at('restFilter') ? 1 : (ph.k === 'restFilter' ? local : 0);
+    $('tableFilter').textContent = restTyping > 0.2 ? 'type = Laptop' : 'filters idle';
+    $('tableFilter').setAttribute('fill', restTyping > 0.2 ? '#e6edf3' : '#4d6276');
+    const tableDone = reached('restBack');
+    $('tableResult').textContent = tableDone ? '2 laptops · $1999 / $1799' : (reached('restToApi') ? 'fetching…' : 'waiting…');
+    $('tableResult').setAttribute('fill', tableDone ? OK : '#4d6276');
+    setStroke($('tableCard'), reached('restFilter') ? REQ : LINE);
+
+    const chatMsg = 'laptops under $2000';
+    const chatTyped = idx > at('chatType') ? 1 : (ph.k === 'chatType' ? local : 0);
+    const chatOn = reached('chatType');
+    $('chatCard').setAttribute('opacity', chatOn ? 1 : 0.55);
+    setStroke($('chatCard'), chatOn ? (reached('chatReply') ? OK : RES) : LINE);
+    $('userBubble').textContent = chatOn
+      ? chatMsg.slice(0, Math.max(1, Math.round(chatTyped * chatMsg.length)))
+      : '…';
+    $('userBubble').setAttribute('fill', chatOn ? '#e6edf3' : '#4d6276');
+
+    const replyOn = reached('chatReply');
+    $('botLine1').textContent = replyOn ? '2 laptops under $2k' : (reached('agentWake') ? 'thinking…' : 'assistant idle');
+    $('botLine1').setAttribute('fill', replyOn ? '#e6edf3' : '#4d6276');
+    $('botLine2').textContent = replyOn ? 'MacBook · Dell XPS' : '';
+    $('botLine2').setAttribute('fill', replyOn ? OK : '#4d6276');
+
+    const clientHot = ['restFilter','restToApi','restBack','chatType','chatToApi','chatReply','done'].includes(ph.k);
+    setStroke($('clientFrame'), ph.k === 'done' ? OK : (clientHot || reached('restToApi') ? REQ : LINE));
+
+    // --- EXPRESS ---
+    const apiBusy = reached('restToApi') || reached('chatToApi');
+    apiLeds.forEach((l, i) => l.setAttribute('fill', apiBusy && Math.floor(t * 8 + i) % 3 === 0 ? REQ : LINE));
+    setStroke($('apiFrame'), ph.k === 'done' ? OK : (apiBusy ? RES : LINE));
+
+    const restHot = ['restToApi','restHandler','restBack'].includes(ph.k) || (reached('restToApi') && !reached('chatType'));
+    setStroke($('restCard'), restHot || reached('restBack') ? REQ : LINE);
+    $('restText').setAttribute('fill', restHot || reached('restBack') ? REQ : '#e6edf3');
+    $('restSub').textContent = restHot ? 'type=Laptop' : 'name · type · price';
+    $('restSub').setAttribute('fill', restHot ? REQ : '#4d6276');
+
+    const agentOn = reached('chatToApi');
+    $('agentCard').setAttribute('opacity', agentOn ? 1 : 0.55);
+    setStroke($('agentCard'), agentOn ? (reached('chatReply') ? OK : RES) : LINE);
+    $('agentText').setAttribute('fill', agentOn ? RES : '#4d6276');
+    $('agentSub').setAttribute('fill', agentOn ? TOOL : '#4d6276');
+    const agentLabels = {
+      chatToApi: 'received userMessage',
+      agentWake: 'connecting MCP…',
+      mcpCall: 'calling getProducts',
+      mcpHandler: 'awaiting tool',
+      mcpResult: 'got products',
+      chatReply: 'sending reply',
+      done: 'agent + MCP live',
+    };
+    $('agentState').textContent = agentLabels[ph.k] || (reached('chatReply') ? 'ready' : (agentOn ? 'running' : 'idle'));
+    $('agentState').setAttribute('fill', agentOn ? OK : '#4d6276');
+
+    $('localHandlerHint').setAttribute('opacity', reached('restHandler') ? 1 : 0.45);
+    setStroke($('localHandlerHint'), reached('restHandler') ? REQ : LINE);
+    $('localHintText').setAttribute('fill', reached('restHandler') ? REQ : '#4d6276');
+
+    // --- MCP ---
+    const mcpBusy = reached('mcpCall');
+    mcpLeds.forEach((l, i) => l.setAttribute('fill', mcpBusy && Math.floor(t * 9 + i * 1.2) % 3 === 0 ? TOOL : LINE));
+    setStroke($('mcpFrame'), ph.k === 'done' ? OK : (mcpBusy ? TOOL : LINE));
+    setStroke($('httpCard'), mcpBusy ? TOOL : LINE);
+    $('httpText').setAttribute('fill', mcpBusy ? TOOL : '#e6edf3');
+
+    $('toolCard').setAttribute('opacity', mcpBusy ? 1 : 0.55);
+    setStroke($('toolCard'), mcpBusy ? TOOL : LINE);
+    $('toolName').setAttribute('fill', mcpBusy ? TOOL : '#4d6276');
+    $('toolArgs').textContent = mcpBusy ? 'type:Laptop max:2000' : 'filters…';
+    $('toolArgs').setAttribute('fill', mcpBusy ? '#e6edf3' : '#4d6276');
+    $('toolOut').textContent = reached('mcpResult') ? '2 products returned' : 'structuredContent';
+    $('toolOut').setAttribute('fill', reached('mcpResult') ? OK : '#4d6276');
+
+    $('mcpHandlerHint').setAttribute('opacity', reached('mcpHandler') ? 1 : 0.45);
+    setStroke($('mcpHandlerHint'), reached('mcpHandler') ? TOOL : LINE);
+    $('mcpHintText').setAttribute('fill', reached('mcpHandler') ? TOOL : '#4d6276');
+
+    // --- SHARED HANDLER ---
+    const handlerRest = reached('restHandler');
+    const handlerMcp = reached('mcpHandler');
+    const handlerHot = handlerRest || handlerMcp;
+    setStroke($('handlerFrame'), ph.k === 'done' ? OK : (handlerHot ? (handlerMcp ? TOOL : REQ) : LINE));
+    setStroke($('handlerCore'), ph.k === 'done' ? OK : (handlerHot ? (handlerMcp && handlerRest ? OK : (handlerMcp ? TOOL : REQ)) : LINE));
+    $('handlerTitle').setAttribute('fill', handlerHot || ph.k === 'done' ? OK : '#e6edf3');
+    $('handlerArgs').setAttribute('fill', handlerHot ? '#e6edf3' : '#4d6276');
+    $('handlerArgs2').setAttribute('fill', handlerHot ? '#e6edf3' : '#4d6276');
+    $('handlerOut').textContent = handlerHot || ph.k === 'done' ? '{ products: […], total: 2 }' : '{ products, total }';
+    $('handlerOut').setAttribute('fill', handlerHot || ph.k === 'done' ? OK : '#4d6276');
+
+    $('dualBadge').setAttribute('opacity', handlerHot || ph.k === 'done' ? 1 : 0.4);
+    setStroke($('badgeRest'), handlerRest || ph.k === 'done' ? REQ : LINE);
+    $('badgeRestTxt').setAttribute('fill', handlerRest || ph.k === 'done' ? REQ : '#4d6276');
+    setStroke($('badgeMcp'), handlerMcp || ph.k === 'done' ? TOOL : LINE);
+    $('badgeMcpTxt').setAttribute('fill', handlerMcp || ph.k === 'done' ? TOOL : '#4d6276');
+
+    // wires
+    setWire('wireRest', ['restToApi','restHandler','restBack'].includes(ph.k) || (reached('restToApi') && !reached('chatType')), REQ);
+    setWire('wireChat', ['chatToApi','agentWake','chatReply'].includes(ph.k) || (reached('chatToApi') && !reached('mcpCall')), RES);
+    setWire('wireAgentMcp', ['mcpCall','mcpHandler','mcpResult'].includes(ph.k) || reached('mcpCall'), TOOL);
+    $('wireRestLbl').setAttribute('fill', reached('restToApi') ? REQ : '#4d6276');
+    $('wireChatLbl').setAttribute('fill', reached('chatToApi') ? RES : '#4d6276');
+    $('wireMcpLbl').setAttribute('fill', reached('mcpCall') ? TOOL : '#4d6276');
+    $('wireToHandlerRest').setAttribute('stroke', handlerRest ? REQ : LINE);
+    $('wireToHandlerRest').setAttribute('opacity', handlerRest ? 0.9 : 0.35);
+    $('wireToHandlerMcp').setAttribute('stroke', handlerMcp ? TOOL : LINE);
+    $('wireToHandlerMcp').setAttribute('opacity', handlerMcp ? 0.9 : 0.35);
+
+    // packet
+    if (ph.from){
+      const e = ease(local);
+      const x = lerp(ph.from[0], ph.to[0], e);
+      const y = lerp(ph.from[1], ph.to[1], e);
+      packet.setAttribute('opacity', Math.min(1, local * 5, (1 - local) * 5 + 0.25));
+      packet.setAttribute('transform', `translate(${x} ${y})`);
+      const w = Math.min(280, ph.label.length * 7.2 + 32);
+      pill.setAttribute('x', -w / 2);
+      pill.setAttribute('width', w);
+      pill.setAttribute('stroke', ph.c);
+      pillText.textContent = ph.label;
+      pillText.setAttribute('fill', ph.c);
+      dot.setAttribute('fill', ph.c);
+    } else {
+      packet.setAttribute('opacity', 0);
+    }
+
+    if (ph.k === 'done'){
+      const s = clamp(lt / 0.5), out = clamp((lt - (ph.d - 0.6)) / 0.45);
+      const label = 'REST + MCP · one handler';
+      toastText.textContent = label;
+      const w = label.length * 8.2 + 70;
+      $('toastBg').setAttribute('x', -w / 2);
+      $('toastBg').setAttribute('width', w);
+      toastInner.querySelector('circle').setAttribute('cx', -w / 2 + 26);
+      toastInner.querySelector('path').setAttribute('d', `M${-w / 2 + 21} 0l4 4 8-9`);
+      toastText.setAttribute('x', 14);
+      toast.setAttribute('opacity', s * (1 - out));
+      toastInner.setAttribute('transform', `translate(0 ${(1 - s) * 16 - out * 10}) scale(${Math.max(back(s) * (1 - out * 0.15), 0.01)})`);
+      setStroke($('clientFrame'), OK);
+      setStroke($('apiFrame'), OK);
+      setStroke($('mcpFrame'), OK);
+      setStroke($('handlerFrame'), OK);
+      setStroke($('handlerCore'), OK);
+    } else {
+      toast.setAttribute('opacity', 0);
+    }
+  }
+
+  function frame(ts){
+    if (last == null) last = ts;
+    const dt = Math.min(0.1, (ts - last) / 1000);
+    last = ts;
+    if (playing){
+      t += dt * speed;
+      if (t >= total){ t = 0; lastToneKey = null; }
+    }
+    render();
+    requestAnimationFrame(frame);
+  }
+
+  const playBtn = $('play');
+  const sync = () => { playBtn.textContent = playing ? 'Pause' : 'Play'; };
+  playBtn.addEventListener('click', () => {
+    playing = !playing;
+    if (playing && soundOn) ensureAudio();
+    sync();
+  });
+  $('replay').addEventListener('click', () => {
+    t = 0; lastToneKey = null; playing = true;
+    if (soundOn) ensureAudio();
+    sync();
+  });
+  document.querySelectorAll('.speed button').forEach(b => b.addEventListener('click', () => {
+    speed = +b.dataset.s;
+    document.querySelectorAll('.speed button').forEach(x => x.setAttribute('aria-pressed', x === b));
+  }));
+
+  const soundBtn = $('soundBtn');
+  soundBtn.addEventListener('click', () => {
+    soundOn = !soundOn;
+    soundBtn.textContent = soundOn ? 'On' : 'Off';
+    soundBtn.setAttribute('aria-pressed', soundOn);
+    if (soundOn){ ensureAudio(); tone('soft'); }
+  });
+
+  const unlock = () => { if (soundOn) ensureAudio(); window.removeEventListener('pointerdown', unlock); };
+  window.addEventListener('pointerdown', unlock);
+
+  const jump = new URLSearchParams(location.search).get('at');
+  if (jump && at(jump) >= 0){
+    const i = at(jump);
+    t = P.slice(0, i).reduce((a, p) => a + p.d, 0) + P[i].d * 0.55;
+    playing = false;
+  } else if (reduce){
+    t = total - 1.4;
+    playing = false;
+  }
+  sync();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
