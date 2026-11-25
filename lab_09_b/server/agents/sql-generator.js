@@ -22,7 +22,7 @@ Rules:
 - Prefer JOINs over subqueries when listing related data.
 - Use table aliases if helpful (e.g. u for users, p for permissions).
 - Return only one SQL statement.
-- Do not use INSERT, UPDATE, DELETE, or DDL. Only SELECT.`;
+- Do not use INSERT, UPDATE, DELETE, or ALTER, DROP and any other Schema manipulations. Only SELECT.`;
 
 /**
  * @param {string} question

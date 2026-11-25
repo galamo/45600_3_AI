@@ -7,8 +7,7 @@
 import "dotenv/config";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import { AgentExecutor, createToolCallingAgent } from "langchain/agents";
-import { ChatPromptTemplate, MessagesPlaceholder } from "@langchain/core/prompts";
+import { createAgent, HumanMessage } from "langchain";
 import { DynamicStructuredTool } from "@langchain/core/tools";
 import { z } from "zod";
 import { createChatModel } from "../lib/llm.js";
@@ -101,7 +100,27 @@ async function getMcpToolsAsLangChain(mcpClient) {
   });
 }
 
-const SYSTEM_PROMPT = `You are a diagram assistant with access to the Mermaid MCP server. Use the available tools to create, render, or work with Mermaid diagrams based on the user's request. Answer concisely and return diagram code or results as appropriate.`;
+const SYSTEM_PROMPT = `You are a diagram assistant with access to the Mermaid MCP server.
+Use the available MCP tools to create, validate, or repair Mermaid diagrams for the user's request.
+Return concise Markdown and include any Mermaid source in a \`\`\`mermaid code fence.`;
+
+/** Text of the last AI message (content may be a string or content blocks). */
+function finalText(messages) {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m?.getType?.() !== "ai" && m?._getType?.() !== "ai" && m?.type !== "ai") continue;
+    const text =
+      typeof m.content === "string"
+        ? m.content
+        : Array.isArray(m.content)
+          ? m.content
+              .map((b) => (typeof b === "string" ? b : b?.type === "text" ? String(b.text ?? "") : ""))
+              .join("")
+          : "";
+    if (text.trim()) return text.trim();
+  }
+  return "";
+}
 
 /**
  * Run the Mermaid MCP agent for one question. Connects to Mermaid MCP, fetches tools, runs agent.
@@ -150,31 +169,16 @@ export async function runMermaidMcpAgent(question) {
       return { answer: "Mermaid MCP server reported no tools." };
     }
 
-    const llm = createModel();
-    const prompt = ChatPromptTemplate.fromMessages([
-      ["system", SYSTEM_PROMPT],
-      ["human", "{input}"],
-      new MessagesPlaceholder("agent_scratchpad"),
-    ]);
-    const agent = createToolCallingAgent({ llm, tools, prompt });
-    const executor = new AgentExecutor({
-      agent,
+    const agent = createAgent({
+      model: createModel(),
       tools,
-      verbose: Boolean(process.env.VERBOSE),
-      maxIterations: 10,
-      returnIntermediateSteps: true,
+      systemPrompt: SYSTEM_PROMPT,
     });
 
-    // The executor loops: LLM picks a tool → tool runs (logged above) → LLM sees result → ...
-    const result = await log.time("agent executor run", () => executor.invoke({ input: question }));
-    const steps = result.intermediateSteps ?? [];
-    log.info(`agent finished after ${steps.length} tool call(s)${steps.length ? ": " + steps.map(([a]) => a.tool).join(" → ") : ""}`);
-    let answer = (result.output ?? "").trim();
-    if (!answer && result.intermediateSteps?.length) {
-      const lastStep = result.intermediateSteps[result.intermediateSteps.length - 1];
-      const observation = lastStep?.[1];
-      if (typeof observation === "string" && observation.trim()) answer = observation.trim();
-    }
+    const result = await log.time("createAgent invoke", () =>
+      agent.invoke({ messages: [new HumanMessage(question)] }, { recursionLimit: 15 })
+    );
+    const answer = finalText(result.messages ?? []);
     log.end(startedAt, answer);
     return { answer };
   } catch (err) {

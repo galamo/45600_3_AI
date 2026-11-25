@@ -21,3 +21,4 @@ CMD ["npm", "start"]
 
 # docker build -t nodejs_2_health .
 # docker run --rm -p 3010:3010 nodejs_2_health
+# docker build --platform linux/amd64 -t nodejs_2_health .

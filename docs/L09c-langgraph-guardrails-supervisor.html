@@ -1,0 +1,433 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Guarded supervisor graph · Lab 09 c</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ground:#0f1720;--panel:#16212d;--line:#2a3a4b;--ink:#e6edf3;--muted:#8297ab;--dim:#4d6276;
+  --req:#5cc8ff;--res:#ffb547;--ok:#3ddc97;--tool:#b18cff;--sse:#5eead4;--err:#ff6b6b;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--ground);color:var(--ink);font-family:"IBM Plex Mono",ui-monospace,Menlo,monospace}
+a{color:var(--req)}
+.wrap{max-width:1200px;margin:0 auto;padding:28px 28px 64px}
+header{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
+h1{font-family:"Bricolage Grotesque",system-ui,sans-serif;font-weight:700;font-size:clamp(26px,3.3vw,40px);margin:0;letter-spacing:-.015em}
+h2{font-family:"Bricolage Grotesque",system-ui,sans-serif;font-weight:600;font-size:22px;margin:0 0 14px}
+.meta{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);text-align:right;line-height:1.7}
+.meta a{color:var(--muted);text-decoration:none}
+.lede{color:var(--muted);margin:12px 0 20px;font-size:19px;line-height:1.5}
+.stage{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:18px;overflow:hidden}
+.stage svg{display:block;width:100%;height:auto}
+.node{opacity:.5;transition:opacity .35s ease}
+.node.lit{opacity:1}
+.node .box{fill:#111b26;stroke:var(--line);stroke-width:1.5;transition:stroke .35s ease,stroke-width .2s ease}
+.node.pulse .box{stroke-width:3}
+.node .t{font-family:"Bricolage Grotesque",system-ui,sans-serif;font-size:27px;font-weight:600;fill:var(--ink)}
+.node .s{font-size:16px;fill:var(--muted)}
+.node .tag{font-size:13px;letter-spacing:.14em;text-transform:uppercase}
+.wire{fill:none;stroke:var(--line);stroke-width:2;transition:stroke .3s ease}
+.wire.seen{stroke:var(--dim)}
+.wire.live{stroke-dasharray:6 6;animation:dash 1.8s linear infinite;stroke-width:2.6}
+@keyframes dash{to{stroke-dashoffset:-24}}
+.zone rect{fill:rgba(255,255,255,.012);stroke:var(--dim);stroke-dasharray:4 6;stroke-width:1}
+.zone text{font-size:14px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;fill:var(--dim)}
+.decor text{font-size:11px;fill:var(--muted)}
+.pkt text{font-size:16px;font-weight:500;fill:var(--ground)}
+.toast{position:absolute;right:18px;top:16px;background:rgba(61,220,151,.12);border:1px solid var(--ok);color:var(--ok);padding:12px 18px;border-radius:12px;font-size:17px;opacity:0;transform:translateY(-6px);transition:opacity .35s ease,transform .35s ease;pointer-events:none}
+.toast.show{opacity:1;transform:none}
+.caption{display:flex;gap:22px;align-items:center;margin:22px 4px 14px;min-height:96px}
+.num{font-family:"Bricolage Grotesque",system-ui,sans-serif;font-size:68px;font-weight:700;color:var(--dim);line-height:1;min-width:96px;font-variant-numeric:tabular-nums}
+#cap{margin:0;font-size:23px;line-height:1.5}
+code{font-family:inherit;padding:1px 6px;border-radius:5px;background:rgba(255,255,255,.06);color:var(--ink)}
+code.req{color:var(--req)}code.res{color:var(--res)}code.ok{color:var(--ok)}code.tool{color:var(--tool)}code.sse{color:var(--sse)}code.err{color:var(--err)}
+.rail{display:flex;gap:4px;margin:4px 4px 16px}
+.rail i{flex:1;height:4px;border-radius:2px;background:var(--line);transition:background .3s ease}
+.rail i.done{background:var(--dim)}.rail i.on{background:var(--ink)}
+.controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.controls .sep{width:1px;height:22px;background:var(--line);margin:0 6px}
+button{font:inherit;font-size:15px;color:var(--ink);background:transparent;border:1px solid var(--line);border-radius:9px;padding:8px 14px;cursor:pointer}
+button:hover{border-color:var(--muted)}
+button[aria-pressed="true"]{border-color:var(--req);color:var(--req)}
+button:focus-visible,a:focus-visible{outline:2px solid var(--req);outline-offset:2px}
+.hint{font-size:11px;color:var(--dim);margin-left:auto}
+@media (max-width:860px){.hint{display:none}}
+@media (max-width:560px){.wrap{padding:16px 14px 48px}.num{font-size:38px;min-width:52px}.caption{gap:12px}#cap{font-size:17px}.meta{text-align:left}button{padding:7px 10px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Guarded supervisor graph</h1>
+    </div>
+    <div class="meta">Lab 09 c · lab_09_c<br><a href="index.html">All flows ↗</a></div>
+  </header>
+  <p class="lede">Lab 09 b built for production: plain-code guard nodes on both sides of the supervisor, and model-written SQL that has to pass four layers.</p>
+
+  <div class="stage">
+    <svg id="flow" viewBox="0 0 1080 665" role="img" aria-label="The UI streams a message to Express. LangGraph runs guardInput, which blocks a delete request and routes it to refuse. An allowed request goes to the supervisor, which calls the SQL agent. The SQL guard rejects SELECT star, the agent fixes the query, it runs read-only as agent_reader, and the answer passes guardOutput before streaming back.">
+      <defs>
+        <pattern id="grid" width="28" height="28" patternUnits="userSpaceOnUse">
+          <path d="M28 0H0V28" fill="none" stroke="#2a3a4b" stroke-opacity=".35" stroke-width="1"/>
+        </pattern>
+        <filter id="glow" x="-100%" y="-100%" width="300%" height="300%">
+          <feGaussianBlur stdDeviation="4" result="b"/>
+          <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+      </defs>
+      <rect width="1080" height="665" fill="url(#grid)"/>
+      <g class="zone"><rect x="215" y="10" width="355" height="640" rx="20"/><text x="233" y="34">langgraph · chat.graph.ts</text></g>
+      <g class="zone"><rect x="585" y="10" width="480" height="150" rx="20"/><text x="603" y="34">tool · ask_docs_agent</text></g>
+      <g class="zone"><rect x="585" y="175" width="480" height="300" rx="20"/><text x="603" y="199">tool · ask_sql_agent</text></g>
+      <g class="zone"><rect x="585" y="490" width="480" height="160" rx="20"/><text x="603" y="514">tool · ask_diagram_agent</text></g>
+      <path class="wire" id="w-u-a" d="M110,265 C110,297 110,297 110,330"/>
+      <path class="wire" id="w-a-gi" d="M200,370 C218,370 217,105 235,105"/>
+      <path class="wire" id="w-gi-rf" d="M407,105 C412,105 415,105 420,105"/>
+      <path class="wire" id="w-gi-s" d="M317,155 C317,200 317,215 317,260"/>
+      <path class="wire" id="w-s-go" d="M395,410 C395,460 395,470 395,520"/>
+      <path class="wire" id="w-go-a" d="M235,570 C217,570 218,440 200,440"/>
+      <path class="wire" id="w-s-d" d="M555,300 C578,300 577,97 600,97"/>
+      <path class="wire" id="w-s-q" d="M555,335 C578,335 577,300 600,300"/>
+      <path class="wire" id="w-s-m" d="M555,370 C578,370 577,580 600,580"/>
+      <path class="wire" id="w-d-k" d="M815,97 C830,97 830,97 845,97"/>
+      <path class="wire" id="w-q-g" d="M815,265 C830,265 830,265 845,265"/>
+      <path class="wire" id="w-g-db" d="M947,320 C947,330 947,335 947,345"/>
+      <path class="wire" id="w-db-q" d="M845,400 C830,400 830,400 815,400"/>
+      <path class="wire" id="w-m-p" d="M815,580 C830,580 830,580 845,580"/>
+      <g class="node" data-x="20" data-y="150" data-w="180" data-h="115" data-drift="0">
+        <rect class="box" x="20" y="150" width="180" height="115" rx="16"/>
+        <text class="tag" x="40" y="180" style="fill:var(--req)">client</text>
+        <text class="t" x="40" y="210">React UI</text>
+        <text class="s" x="40" y="234">:5185 · SSE</text>
+      </g>
+      <g class="node" data-x="20" data-y="330" data-w="180" data-h="150" data-drift="0">
+        <rect class="box" x="20" y="330" width="180" height="150" rx="16"/>
+        <text class="tag" x="40" y="360" style="fill:var(--req)">http</text>
+        <text class="t" x="40" y="390">API</text>
+        <text class="s" x="40" y="414">Express :3012</text>
+        <text class="s" x="40" y="438">zod · rate limit</text>
+      </g>
+      <g class="node" data-x="235" data-y="55" data-w="172" data-h="100" data-drift="0">
+        <rect class="box" x="235" y="55" width="172" height="100" rx="16"/>
+        <text class="tag" x="255" y="85" style="fill:var(--res)">guard</text>
+        <text class="t" x="255" y="115">guardInput</text>
+        <text class="s" x="255" y="139">plain code</text>
+      </g>
+      <g class="node" data-x="420" data-y="55" data-w="135" data-h="100" data-drift="0">
+        <rect class="box" x="420" y="55" width="135" height="100" rx="16"/>
+        <text class="tag" x="440" y="85" style="fill:var(--err)">node</text>
+        <text class="t" x="440" y="115">refuse</text>
+        <text class="s" x="440" y="139">0 LLM calls</text>
+      </g>
+      <g class="node" data-x="235" data-y="260" data-w="320" data-h="150" data-drift="1">
+        <rect class="box" x="235" y="260" width="320" height="150" rx="16"/>
+        <text class="tag" x="255" y="290" style="fill:var(--tool)">agent · createAgent</text>
+        <text class="t" x="255" y="320">Supervisor</text>
+        <text class="s" x="255" y="344">3 specialists as tools</text>
+        <text class="s" x="255" y="368">rewrites follow-ups</text>
+      </g>
+      <g class="node" data-x="235" data-y="520" data-w="320" data-h="100" data-drift="0">
+        <rect class="box" x="235" y="520" width="320" height="100" rx="16"/>
+        <text class="tag" x="255" y="550" style="fill:var(--res)">guard</text>
+        <text class="t" x="255" y="580">guardOutput</text>
+        <text class="s" x="255" y="604">redact secrets · rows</text>
+      </g>
+      <g class="node" data-x="600" data-y="50" data-w="215" data-h="95" data-drift="0">
+        <rect class="box" x="600" y="50" width="215" height="95" rx="16"/>
+        <text class="tag" x="620" y="80" style="fill:var(--tool)">agent</text>
+        <text class="t" x="620" y="110">Docs agent</text>
+        <text class="s" x="620" y="134">search_docs</text>
+      </g>
+      <g class="node" data-x="845" data-y="50" data-w="205" data-h="95" data-drift="0">
+        <rect class="box" x="845" y="50" width="205" height="95" rx="16"/>
+        <text class="tag" x="865" y="80" style="fill:var(--sse)">store</text>
+        <text class="t" x="865" y="110">kb_docs</text>
+        <text class="s" x="865" y="134">pgvector</text>
+      </g>
+      <g class="node" data-x="600" data-y="215" data-w="215" data-h="240" data-drift="0">
+        <rect class="box" x="600" y="215" width="215" height="240" rx="16"/>
+        <text class="tag" x="620" y="245" style="fill:var(--tool)">agent</text>
+        <text class="t" x="620" y="275">SQL agent</text>
+        <text class="s" x="620" y="299">list_tables</text>
+        <text class="s" x="620" y="323">search_schema</text>
+        <text class="s" x="620" y="347">run_readonly_sql</text>
+      </g>
+      <g class="node" data-x="845" data-y="215" data-w="205" data-h="105" data-drift="0">
+        <rect class="box" x="845" y="215" width="205" height="105" rx="16"/>
+        <text class="tag" x="865" y="245" style="fill:var(--res)">guard · ast</text>
+        <text class="t" x="865" y="275">sql-guard</text>
+        <text class="s" x="865" y="299">1 SELECT · LIMIT</text>
+      </g>
+      <g class="node" data-x="845" data-y="345" data-w="205" data-h="110" data-drift="0">
+        <rect class="box" x="845" y="345" width="205" height="110" rx="16"/>
+        <text class="tag" x="865" y="375" style="fill:var(--res)">db</text>
+        <text class="t" x="865" y="405">agent_reader</text>
+        <text class="s" x="865" y="429">READ ONLY role</text>
+      </g>
+      <g class="node" data-x="600" data-y="530" data-w="215" data-h="100" data-drift="0">
+        <rect class="box" x="600" y="530" width="215" height="100" rx="16"/>
+        <text class="tag" x="620" y="560" style="fill:var(--tool)">agent</text>
+        <text class="t" x="620" y="590">Diagram</text>
+        <text class="s" x="620" y="614">Zod output</text>
+      </g>
+      <g class="node" data-x="845" data-y="530" data-w="205" data-h="100" data-drift="0">
+        <rect class="box" x="845" y="530" width="205" height="100" rx="16"/>
+        <text class="tag" x="865" y="560" style="fill:var(--tool)">mcp</text>
+        <text class="t" x="865" y="590">Mermaid MCP</text>
+        <text class="s" x="865" y="614">allow-listed</text>
+      </g>
+
+      <g id="pkts"></g>
+    </svg>
+    <div class="toast" id="toast" role="status">✓ 2 guard nodes · SQL fixed itself · 0 hashes leaked</div>
+  </div>
+
+  <div class="caption">
+    <div class="num" id="num">01</div>
+    <p id="cap" aria-live="polite"></p>
+  </div>
+  <div class="rail" id="rail" aria-hidden="true"></div>
+  <div class="controls">
+    <button id="bPlay" aria-pressed="false">Pause</button>
+    <button id="bReplay">Replay</button>
+    <button id="bSound" aria-pressed="true">Sound On</button>
+    <span class="sep"></span>
+    <button class="spd" data-s="0.5" aria-pressed="false">0.5x</button>
+    <button class="spd" data-s="1" aria-pressed="true">1x</button>
+    <button class="spd" data-s="1.5" aria-pressed="false">1.5x</button>
+    <span class="hint">Space pause · R replay · ←/→ step</span>
+  </div>
+</div>
+
+<script>
+(() => {
+"use strict";
+
+/* PHASES — see flow 12 for the field reference. */
+const P = [
+  {"k": "post", "d": 4.0, "step": 1, "from": [110, 265], "to": [110, 330], "label": "POST /api/chat/stream", "c": "req", "wire": "u-a", "txt": "The UI sends the message plus recent history. Express validates it with Zod, rate-limits it and gives it a request id.", "tone": "whoosh"},
+  {"k": "bad", "d": 4.0, "step": 2, "from": [200, 370], "to": [235, 105], "label": "“Delete all inactive users”", "c": "req", "wire": "a-gi", "txt": "Every message enters the graph at <code class='res'>guardInput</code>, a node of plain code with no LLM.", "tone": "soft"},
+  {"k": "block", "d": 4.0, "step": 3, "from": [407, 105], "to": [420, 105], "label": "blocked: data_modification", "c": "err", "wire": "gi-rf", "txt": "A write intent is blocked in about 1 ms and routed to <code class='err'>refuse</code>. No model is called, so it costs nothing.", "tone": "blip"},
+  {"k": "ask", "d": 4.0, "step": 4, "from": [200, 370], "to": [235, 105], "label": "“Show every column for Alice”", "c": "req", "wire": "a-gi", "txt": "Next message. This one is a read request, so the input guard lets it through.", "tone": "whoosh"},
+  {"k": "allowed", "d": 4.0, "step": 5, "from": [317, 155], "to": [317, 260], "label": "allowed", "c": "ok", "wire": "gi-s", "txt": "The edge <code>guardInput → supervisor</code> is chosen by the graph. The model cannot skip it.", "tone": "soft"},
+  {"k": "delegate", "d": 4.0, "step": 6, "from": [555, 335], "to": [600, 300], "label": "ask_sql_agent", "c": "tool", "wire": "s-q", "txt": "The supervisor calls the SQL specialist as a tool. It can also call the docs or diagram agent and combine their answers.", "tone": "blip"},
+  {"k": "star", "d": 4.0, "step": 7, "from": [815, 265], "to": [845, 265], "label": "SELECT * FROM users", "c": "res", "wire": "q-g", "txt": "The SQL agent writes <code class='res'>SELECT *</code>. <code class='tool'>run_readonly_sql</code> passes it to the SQL guard, which parses the AST.", "tone": "soft"},
+  {"k": "reject", "d": 4.0, "step": 8, "from": [845, 265], "to": [815, 265], "label": "✗ no * on users", "c": "err", "wire": "q-g", "txt": "Rejected: <code>*</code> is not allowed on a sensitive table. The error comes back as a tool result, not as a crash.", "tone": "blip"},
+  {"k": "fix", "d": 4.0, "step": 9, "from": [815, 265], "to": [845, 265], "label": "SELECT id, name, email …", "c": "res", "wire": "q-g", "txt": "The agent reads the error and rewrites the query with explicit columns, so it fixes its own query.", "tone": "soft"},
+  {"k": "db", "d": 4.4, "step": 10, "from": [947, 320], "to": [947, 345], "label": "READ ONLY · timeout", "c": "res", "wire": "g-db", "txt": "The query runs as <code class='res'>agent_reader</code> in a READ ONLY transaction. Column GRANTs block <code>password_hash</code> even if every other layer fails.", "tone": "soft"},
+  {"k": "rows", "d": 4.0, "step": 11, "from": [845, 400], "to": [815, 400], "label": "rows", "c": "ok", "wire": "db-q", "txt": "Rows come back, and the SQL agent writes its answer.", "tone": "soft"},
+  {"k": "back", "d": 4.0, "step": 12, "from": [600, 300], "to": [555, 335], "label": "answer + sql", "c": "ok", "wire": "s-q", "txt": "The specialist's answer returns to the supervisor as a tool result.", "tone": "soft"},
+  {"k": "redact", "d": 4.0, "step": 13, "from": [395, 410], "to": [395, 520], "label": "answer", "c": "ok", "wire": "s-go", "txt": "<code class='res'>guardOutput</code> always runs. It masks keys and hashes, strips restricted columns and caps the size.", "tone": "blip"},
+  {"k": "result", "d": 4.0, "step": 14, "from": [235, 570], "to": [200, 440], "label": "event: result", "c": "sse", "wire": "go-a", "txt": "Trace events stream over SSE the whole time, and the final answer arrives as <code class='sse'>event: result</code>.", "tone": "soft"},
+  {"k": "ui", "d": 5.2, "step": 15, "from": [110, 330], "to": [110, 265], "label": "answer · SQL · trace", "c": "ok", "wire": "u-a", "txt": "The UI shows the answer, both SQL attempts and the agent timeline. <em>Agents decide, tools act, guardrails enforce.</em>", "tone": "resolve"},
+];
+
+/* ---------- setup ---------- */
+const NS = "http://www.w3.org/2000/svg";
+const svg = document.getElementById("flow");
+const pktLayer = document.getElementById("pkts");
+const capEl = document.getElementById("cap");
+const numEl = document.getElementById("num");
+const toastEl = document.getElementById("toast");
+const railEl = document.getElementById("rail");
+const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+const nodes = [...svg.querySelectorAll(".node")].map((g, i) => ({
+  g, rect: g.querySelector(".box"),
+  x: +g.dataset.x, y: +g.dataset.y, w: +g.dataset.w, h: +g.dataset.h,
+  drift: g.dataset.drift === "1", seed: i * 1.7
+}));
+const wireEl = id => (id ? document.getElementById("w-" + id) : null);
+
+function nodeAt(pt) {
+  let best = null, bestArea = Infinity;
+  for (const n of nodes) {
+    const m = 8;
+    if (pt[0] >= n.x - m && pt[0] <= n.x + n.w + m && pt[1] >= n.y - m && pt[1] <= n.y + n.h + m) {
+      const a = n.w * n.h; if (a < bestArea) { best = n; bestArea = a; }
+    }
+  }
+  return best;
+}
+
+const starts = []; let total = 0;
+P.forEach(p => { starts.push(total); total += p.d; });
+P.forEach(p => { p.targets = [p.to, ...(p.also || []).map(a => a.to)].map(nodeAt).filter(Boolean); });
+
+P.forEach(() => railEl.appendChild(document.createElement("i")));
+const segs = [...railEl.children];
+
+/* ---------- packets ---------- */
+function makePacket(label, c) {
+  const g = document.createElementNS(NS, "g"); g.setAttribute("class", "pkt");
+  const col = `var(--${c})`;
+  if (label) {
+    const w = Math.max(36, label.length * 9.4 + 32);
+    const r = document.createElementNS(NS, "rect");
+    r.setAttribute("x", -w / 2); r.setAttribute("y", -50); r.setAttribute("width", w); r.setAttribute("height", 32); r.setAttribute("rx", 16);
+    r.style.fill = col;
+    const t = document.createElementNS(NS, "text");
+    t.setAttribute("x", 0); t.setAttribute("y", -28); t.setAttribute("text-anchor", "middle"); t.textContent = label;
+    g.append(r, t);
+  }
+  const halo = document.createElementNS(NS, "circle"); halo.setAttribute("r", 16); halo.style.fill = col; halo.style.opacity = .22;
+  const dot = document.createElementNS(NS, "circle"); dot.setAttribute("r", 8); dot.style.fill = col; dot.setAttribute("filter", "url(#glow)");
+  g.append(halo, dot); pktLayer.appendChild(g);
+  return g;
+}
+function trackFor(from, to, wire) {
+  const path = wireEl(wire);
+  if (path && (from[0] !== to[0] || from[1] !== to[1])) {
+    const L = path.getTotalLength(), a = path.getPointAtLength(0), b = path.getPointAtLength(L);
+    const rev = Math.hypot(from[0] - b.x, from[1] - b.y) < Math.hypot(from[0] - a.x, from[1] - a.y);
+    return e => { const q = path.getPointAtLength((rev ? 1 - e : e) * L); return [q.x, q.y]; };
+  }
+  return e => [from[0] + (to[0] - from[0]) * e, from[1] + (to[1] - from[1]) * e];
+}
+const ease = x => (x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
+
+/* ---------- sound (WebAudio) ---------- */
+let ac = null, master = null, soundOn = !reduce;
+function unlock() {
+  if (ac) { if (ac.state === "suspended") ac.resume(); return; }
+  try {
+    ac = new (window.AudioContext || window.webkitAudioContext)();
+    master = ac.createGain(); master.gain.value = 0.07; master.connect(ac.destination);
+  } catch (e) { ac = null; }
+}
+window.addEventListener("pointerdown", unlock);
+function osc(type, f0, f1, dur, delay = 0, vol = 1) {
+  const n = ac.currentTime + delay, o = ac.createOscillator(), g = ac.createGain();
+  o.type = type; o.frequency.setValueAtTime(f0, n);
+  if (f1) o.frequency.exponentialRampToValueAtTime(f1, n + dur);
+  g.gain.setValueAtTime(0.0001, n); g.gain.exponentialRampToValueAtTime(vol, n + 0.015);
+  g.gain.exponentialRampToValueAtTime(0.0001, n + dur);
+  o.connect(g); g.connect(master); o.start(n); o.stop(n + dur + 0.03);
+}
+function whoosh() {
+  const n = ac.currentTime, len = 0.32, buf = ac.createBuffer(1, ac.sampleRate * len, ac.sampleRate), d = buf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  const src = ac.createBufferSource(); src.buffer = buf;
+  const f = ac.createBiquadFilter(); f.type = "bandpass"; f.Q.value = 1.2;
+  f.frequency.setValueAtTime(380, n); f.frequency.exponentialRampToValueAtTime(2400, n + len);
+  const g = ac.createGain(); g.gain.setValueAtTime(0.0001, n); g.gain.exponentialRampToValueAtTime(0.7, n + 0.06); g.gain.exponentialRampToValueAtTime(0.0001, n + len);
+  src.connect(f); f.connect(g); g.connect(master); src.start(n); src.stop(n + len);
+}
+function tone(kind) {
+  if (!soundOn || !ac || !kind || kind === "rest") return;
+  switch (kind) {
+    case "whoosh": whoosh(); break;
+    case "blip": osc("square", 880, null, 0.07, 0, 0.35); break;
+    case "soft": osc("triangle", 440, 520, 0.18, 0, 0.6); break;
+    case "chime": osc("sine", 660, null, 0.6, 0, 0.7); osc("sine", 990, null, 0.6, 0.05, 0.45); break;
+    case "resolve": [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => osc("sine", f, null, 0.55, i * 0.09, 0.6)); break;
+  }
+}
+
+/* ---------- state ---------- */
+let t = 0, last = null, playing = !reduce, speed = 0.5, cur = -1, arrived = new Set();
+let packets = [];
+
+function clearPackets() { packets.forEach(p => p.g.remove()); packets = []; }
+function resetVisual() {
+  nodes.forEach(n => { n.g.classList.remove("lit", "pulse"); n.rect.style.stroke = ""; });
+  svg.querySelectorAll(".wire").forEach(w => { w.classList.remove("live", "seen"); w.style.stroke = ""; });
+  toastEl.classList.remove("show"); clearPackets(); arrived.clear(); cur = -1;
+}
+function lightNode(n, c) { n.g.classList.add("lit"); n.rect.style.stroke = `var(--${c})`; }
+function arrive(i) {
+  if (arrived.has(i)) return; arrived.add(i);
+  const p = P[i]; p.targets.forEach(n => lightNode(n, p.c));
+  if (i === P.length - 1) toastEl.classList.add("show");
+}
+function setWire(id, c, live) {
+  const w = wireEl(id); if (!w) return;
+  if (live) { w.classList.add("live"); w.classList.remove("seen"); w.style.stroke = `var(--${c})`; }
+  else { w.classList.remove("live"); w.classList.add("seen"); w.style.stroke = ""; }
+}
+function enter(i, silent) {
+  for (let j = cur + 1; j < i; j++) { arrive(j); }       // catch up when jumping forward
+  if (cur >= 0) { const pc = P[cur]; [pc.wire, ...(pc.also || []).map(a => a.wire)].forEach(w => setWire(w, pc.c, false)); }
+  nodes.forEach(n => n.g.classList.remove("pulse"));
+  cur = i; const p = P[i];
+  numEl.textContent = String(p.step).padStart(2, "0");
+  capEl.innerHTML = p.txt;
+  segs.forEach((s, j) => { s.className = j < i ? "done" : j === i ? "on" : ""; });
+  clearPackets();
+  const lanes = [{ from: p.from, to: p.to, label: p.label, wire: p.wire }, ...(p.also || [])];
+  lanes.forEach(l => {
+    setWire(l.wire, p.c, true);
+    packets.push({ g: makePacket(l.label, p.c), track: trackFor(l.from, l.to, l.wire), still: l.from[0] === l.to[0] && l.from[1] === l.to[1] });
+  });
+  if (packets.every(k => k.still)) p.targets.forEach(n => { lightNode(n, p.c); n.g.classList.add("pulse"); });
+  if (!silent) tone(p.tone);
+}
+function phaseAt(time) { for (let i = 0; i < P.length; i++) if (time < starts[i] + P[i].d) return i; return P.length - 1; }
+
+function render(now) {
+  const i = phaseAt(t);
+  if (i < cur) resetVisual();
+  if (i !== cur) enter(i, !playing);
+  const p = P[i], prog = Math.min(1, (t - starts[i]) / p.d), travel = Math.min(1, prog / 0.72), e = ease(travel);
+  packets.forEach(k => {
+    const [x, y] = k.track(e);
+    const bob = k.still && !reduce ? Math.sin(now / 260) * 3 : 0;
+    k.g.setAttribute("transform", `translate(${x.toFixed(1)},${(y + bob).toFixed(1)})`);
+    k.g.style.opacity = k.still ? 1 : (prog > 0.9 ? Math.max(0, 1 - (prog - 0.9) * 10) : 1);
+  });
+  if (travel >= 1) arrive(i);
+  if (!reduce) nodes.forEach(n => { if (n.drift) n.g.setAttribute("transform", `translate(0,${(Math.sin(now / 1400 + n.seed) * 2.6).toFixed(2)})`); });
+}
+function frame(now) {
+  if (last == null) last = now;
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  if (playing) { t += dt * speed; if (t >= total) { t = 0; resetVisual(); } }
+  render(now);
+  requestAnimationFrame(frame);
+}
+
+/* ---------- controls ---------- */
+const bPlay = document.getElementById("bPlay"), bSound = document.getElementById("bSound");
+function syncPlay() { bPlay.textContent = playing ? "Pause" : "Play"; bPlay.setAttribute("aria-pressed", String(!playing)); }
+function syncSound() { bSound.textContent = soundOn ? "Sound On" : "Sound Off"; bSound.setAttribute("aria-pressed", String(soundOn)); }
+function togglePlay() { playing = !playing; syncPlay(); }
+function replay() { resetVisual(); t = 0; playing = true; syncPlay(); }
+function jumpTo(i, freeze, frac = 0.45) {   // frac 0.45 → packet frozen mid-flight, pill visible
+  i = Math.max(0, Math.min(P.length - 1, i));
+  resetVisual(); t = starts[i] + P[i].d * frac;
+  if (freeze) { playing = false; syncPlay(); }
+  render(performance.now()); arrive(i);
+}
+bPlay.addEventListener("click", togglePlay);
+document.getElementById("bReplay").addEventListener("click", replay);
+bSound.addEventListener("click", () => { unlock(); soundOn = !soundOn; syncSound(); });
+document.querySelectorAll(".spd").forEach(b => b.addEventListener("click", () => {
+  speed = +b.dataset.s; document.querySelectorAll(".spd").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+}));
+document.addEventListener("keydown", e => {
+  if (e.target.tagName === "BUTTON" && (e.key === " " || e.key === "Enter")) return;
+  if (e.key === " ") { e.preventDefault(); togglePlay(); }
+  else if (e.key === "r" || e.key === "R") replay();
+  else if (e.key === "ArrowRight") jumpTo(cur + 1, true);
+  else if (e.key === "ArrowLeft") jumpTo(cur - 1, true);
+});
+
+/* ---------- boot ---------- */
+syncSound();
+document.querySelectorAll(".spd").forEach(x => x.setAttribute("aria-pressed", String(+x.dataset.s === speed)));   // default speed from spec
+const at = new URLSearchParams(location.search).get("at");
+const atIdx = at ? P.findIndex(p => p.k === at) : -1;
+if (atIdx >= 0) jumpTo(atIdx, true);
+else if (reduce) jumpTo(P.length - 1, true, 0.999);
+syncPlay();
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

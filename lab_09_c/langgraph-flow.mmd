@@ -1,0 +1,18 @@
+%% Lab 09 c — chat graph (server/src/graph/chat.graph.ts)
+%% Deterministic guardrail nodes wrap the non-deterministic supervisor agent.
+flowchart LR
+  START([START]) --> guardInput[guardInput<br/>normalise + input guard]
+  guardInput -- blocked --> refuse[refuse<br/>polite reason]
+  guardInput -- allowed --> supervisor[supervisor<br/>createAgent · agents as tools]
+  supervisor --> guardOutput[guardOutput<br/>redact + re-attach diagram]
+  refuse --> END([END])
+  guardOutput --> END
+
+  subgraph specialists["specialist agents (tools of the supervisor)"]
+    docs[docs_agent<br/>search_docs]
+    sql[sql_agent<br/>list_tables · search_schema · run_readonly_sql]
+    diagram[diagram_agent<br/>list_tables · search_docs · Mermaid MCP]
+  end
+  supervisor -. ask_docs_agent .-> docs
+  supervisor -. ask_sql_agent .-> sql
+  supervisor -. ask_diagram_agent .-> diagram

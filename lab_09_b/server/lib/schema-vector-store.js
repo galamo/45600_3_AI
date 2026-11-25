@@ -11,13 +11,11 @@ function getEmbeddings() {
   const apiKey = process.env.OPENROUTER_API_KEY || process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("Set OPENAI_API_KEY or OPENROUTER_API_KEY in .env");
   const useOpenRouter = Boolean(process.env.OPENROUTER_API_KEY);
-  return new OpenAIEmbeddings(
-    {
-      model: useOpenRouter ? "openai/text-embedding-3-small" : "text-embedding-3-small",
-      apiKey,
-    },
-    useOpenRouter ? { basePath: "https://openrouter.ai/api/v1" } : undefined
-  );
+  return new OpenAIEmbeddings({
+    model: useOpenRouter ? "openai/text-embedding-3-small" : "text-embedding-3-small",
+    apiKey,
+    ...(useOpenRouter ? { configuration: { baseURL: "https://openrouter.ai/api/v1" } } : {}),
+  });
 }
 
 export async function getSchemaVectorStore() {

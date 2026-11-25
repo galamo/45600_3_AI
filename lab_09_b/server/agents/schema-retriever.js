@@ -9,7 +9,7 @@ import { createLogger } from "../lib/logger.js";
 
 const log = createLogger("Schema Retriever", "yellow");
 
-export async function retrieveSchemaContext(question, k = 8) {
+export async function retrieveSchemaContext(question, k = 10) {
   const store = await log.time("connect to vector store schema_vectors", () => getSchemaVectorStore());
   // With scores so the log shows how relevant each schema chunk is (cosine distance, lower = closer).
   const results = await log.time(`similarity search (k=${k})`, () => store.similaritySearchWithScore(question, k));

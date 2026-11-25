@@ -1,5 +1,5 @@
 services:
-  db:
+:
     image: pgvector/pgvector:pg17
     container_name: pgvector-db
     restart: unless-stopped

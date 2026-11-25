@@ -12,16 +12,16 @@
     "load-data": "node scripts/load-data.js"
   },
   "dependencies": {
+    "@langchain/community": "^1.1.29",
+    "@langchain/core": "^1.5.1",
+    "@langchain/openai": "^1.8.5",
     "@modelcontextprotocol/sdk": "^1.26.0",
-    "@langchain/community": "^0.3.0",
-    "@langchain/core": "^0.3.0",
-    "@langchain/openai": "^0.3.0",
+    "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.21.0",
+    "langchain": "^1.6.8",
     "pg": "^8.13.0",
-    "langchain": "^0.3.0",
     "uuid": "^10.0.0",
-    "cors": "^2.8.5",
     "zod": "^3.23.0"
   }
 }
